@@ -233,7 +233,7 @@ class Seq2SeqLSTMAttention(nn.Module):
         super(Seq2SeqLSTMAttention, self).__init__()
 
         self.vocab_size = opt.vocab_size
-        self.emb_dim = opt.word_vec_size
+        self.emb_dim = opt.word_vec_sizegitg
         self.num_directions = 2 if opt.bidirectional else 1
         self.src_hidden_dim = opt.rnn_size
         self.trg_hidden_dim = opt.rnn_size
@@ -647,39 +647,6 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         # Return final outputs (logits after log_softmax), hidden states, and attention weights (for visualization)
         return decoder_log_probs, decoder_outputs, attn_weights, copy_weights
-
-    def merge_oov2unk(self, decoder_log_prob, max_oov_number):
-        '''
-        Merge the probs of oov words to the probs of <unk>, in order to generate the next word
-        :param decoder_log_prob: log_probs after merging generative and copying (batch_size, trg_seq_len, vocab_size + max_oov_number)
-        :return:
-        '''
-        batch_size, seq_len, _ = decoder_log_prob.size()
-        # range(0, vocab_size)
-        vocab_index = Variable(torch.arange(start=0, end=self.vocab_size).type(torch.LongTensor))
-        # range(vocab_size, vocab_size+max_oov_number)
-        oov_index = Variable(
-            torch.arange(start=self.vocab_size, end=self.vocab_size + max_oov_number).type(
-                torch.LongTensor))
-        oov2unk_index = Variable(torch.zeros(batch_size * seq_len, max_oov_number).type(
-            torch.LongTensor) + self.unk_word)
-
-        if torch.cuda.is_available():
-            vocab_index = vocab_index.cuda()
-            oov_index = oov_index.cuda()
-            oov2unk_index = oov2unk_index.cuda()
-
-        merged_log_prob = torch.index_select(decoder_log_prob, dim=2, index=vocab_index).view(
-            batch_size * seq_len, self.vocab_size)
-        oov_log_prob = torch.index_select(decoder_log_prob, dim=2, index=oov_index).view(
-            batch_size * seq_len, max_oov_number)
-
-        # all positions are zeros except the index of unk_word,
-        # then add all the probs of oovs to <unk>
-        merged_log_prob = merged_log_prob.scatter_add_(1, oov2unk_index, oov_log_prob)
-        merged_log_prob = merged_log_prob.view(batch_size, seq_len, self.vocab_size)
-
-        return merged_log_prob
 
     def merge_copy_probs(self, decoder_logits, copy_logits, src_map, oov_list):
         '''
