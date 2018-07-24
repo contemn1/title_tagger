@@ -2,7 +2,6 @@ import argparse
 import logging
 import os
 import time
-from collections import namedtuple
 
 import numpy as np
 import torch
@@ -317,4 +316,3 @@ if __name__ == '__main__':
         for batch in data_loader:
             train_one_batch(batch, model, optimizer_ml, forward_ml, criterion,
                             opt)
-    
