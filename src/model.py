@@ -530,8 +530,14 @@ class Seq2SeqLSTMAttention(nn.Module):
         Word Sampling
             (1) Feedforwarding RNN
         '''
-        # take the first word (should be BOS <s>) of each target sequence (batch_size, 1)
-        trg_input = trg_inputs[:, 0].unsqueeze(1)
+        if sampling == "teacher_forcing":
+            trg_input = trg_inputs[:, 0].unsqueeze(1)
+        else:
+            #  the first word should be SOS <s>
+            sos_batch = np.full((batch_size, 1), SOS, dtype=np.int64)
+            trg_input = torch.from_numpy(sos_batch)
+            trg_input = trg_input.cuda() if torch.cuda.is_available() else trg_input
+
         decoder_log_probs = []
         attn_weights = []
         copy_weights = []
@@ -616,9 +622,8 @@ class Seq2SeqLSTMAttention(nn.Module):
                 categorical_distribution = Categorical(
                     logits=decoder_log_prob.data)
                 top_idx = categorical_distribution.sample()
-                predicted_indices.append(top_idx.unsqueeze(1))
+                predicted_indices.append(top_idx)
                 top_idx[top_idx >= self.vocab_size] = self.unk_word
-                top_idx = top_idx.unsqueeze(1)
                 # top_idx and next_index are (batch_size, 1)
                 trg_input = top_idx.cuda() if torch.cuda.is_available() else top_idx
 

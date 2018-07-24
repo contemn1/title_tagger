@@ -72,6 +72,9 @@ def calculate_reward(predicted_indices, target_indices):
     target_mask = (target_indices != 0).data.numpy()
     predicted_seq_length = (predicted_indices == EOS).data.numpy()
     predicted_seq_length = np.argmax(predicted_seq_length, axis=1)
+    predicted_seq_length = np.where(predicted_seq_length == 0, max_length,
+                                    predicted_seq_length)
+
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
     predicted_mask = np.array(predicted_mask)
@@ -82,7 +85,9 @@ def calculate_reward(predicted_indices, target_indices):
     target_seq_length = np.sum(target_mask, axis=1)
     precision = true_positive / predicted_seq_length
     recall = true_positive / target_seq_length
-    f1_score = 2 * precision * recall / (precision + recall)
+    numerator = 2 * precision * recall
+    denominator = precision + recall
+    f1_score = np.where(numerator == 0, 0, numerator / denominator)
 
     return np.average(f1_score)
 
