@@ -843,24 +843,3 @@ class Seq2SeqLSTMAttention(nn.Module):
                 return log_probs, dec_hidden, (attn_weights, copy_weights)
         else:
             return log_probs, dec_hidden
-
-    def greedy_predict(self, input_src, input_trg, trg_mask=None,
-                       ctx_mask=None):
-        src_h, (src_h_t, src_c_t) = self.encode(input_src)
-        if torch.cuda.is_available():
-            input_trg = input_trg.cuda()
-        decoder_logits, hiddens, attn_weights = self.decode_old(
-            trg_input=input_trg,
-            enc_context=src_h,
-            enc_hidden=(src_h_t, src_c_t),
-            trg_mask=trg_mask,
-            ctx_mask=ctx_mask, is_train=False)
-
-        if torch.cuda.is_available():
-            max_words_pred = decoder_logits.data.cpu().numpy().argmax(
-                axis=-1).flatten()
-        else:
-            max_words_pred = decoder_logits.data.numpy().argmax(
-                axis=-1).flatten()
-
-        return max_words_pred
