@@ -46,7 +46,7 @@ class TextIndexDataset(Dataset):
                                 zip(current_sentence, word_indices)]
             tag_indices_ext = [value if key not in oov_dict else oov_dict[key]
                                for key, value in
-                               zip(current_tags, word_indices)]
+                               zip(current_tags, tag_indices)]
 
             word_indices_ext_list.append(word_indices_ext)
             tag_indices_ext_list.append(tag_indices_ext)

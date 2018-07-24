@@ -144,6 +144,10 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
             tag_indices.contiguous().view(-1)
         )
     else:
+        if decoder_log_probs.size(1) != tag_indices_ext.size(1):
+            print("predicted sequence length {0}".format(decoder_log_probs.size(1)))
+            print("actual sequence length {0}".format(tag_indices_ext.size(1)))
+
         loss = criterion(
             decoder_log_probs.contiguous().view(-1,
                                                 opt.vocab_size + max_oov_number),
@@ -253,4 +257,5 @@ if __name__ == '__main__':
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
     for batch in data_loader:
+        print(batch[3].size(1) == batch[4].size(1))
         train_one_batch(batch, model, optimizer_ml, forward_ml, criterion, opt)
