@@ -700,6 +700,10 @@ class Seq2SeqLSTMAttention(nn.Module):
         padding_mask = torch.from_numpy(
             np.full(shape=(batch_size * max_length, max_oov_number),
                     fill_value=float("-inf"), dtype=np.float32))
+
+        if torch.cuda.is_available():
+            padding_mask = padding_mask.cuda()
+
         flattened_decoder_logits_extend = torch.where(
             flattened_decoder_logits_extend == 0,
             padding_mask,
