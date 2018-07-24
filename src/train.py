@@ -255,5 +255,6 @@ if __name__ == '__main__':
     model = Seq2SeqLSTMAttention(opt)
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
-    for batch in data_loader:
-        train_one_batch(batch, model, optimizer_ml, forward_ml, criterion, opt)
+    for _ in range(100):
+        for batch in data_loader:
+            train_one_batch(batch, model, optimizer_ml, forward_ml, criterion, opt)
