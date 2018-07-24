@@ -608,7 +608,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 predicted_indices.append(top_idx.squeeze(2))
                 # if it's a oov, replace it with <unk>
                 top_idx[top_idx >= self.vocab_size] = self.unk_word
-                top_idx = Variable(top_idx.squeeze(2))
+                top_idx = top_idx.squeeze(2)
                 # top_idx and next_index are (batch_size, 1)
                 trg_input = top_idx.cuda() if torch.cuda.is_available() else top_idx
 
@@ -618,7 +618,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 top_idx = categorical_distribution.sample()
                 predicted_indices.append(top_idx.unsqueeze(1))
                 top_idx[top_idx >= self.vocab_size] = self.unk_word
-                top_idx = Variable(top_idx.unsqueeze(1))
+                top_idx = top_idx.unsqueeze(1)
                 # top_idx and next_index are (batch_size, 1)
                 trg_input = top_idx.cuda() if torch.cuda.is_available() else top_idx
 
