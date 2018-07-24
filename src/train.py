@@ -130,6 +130,7 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
         word_indices_ext = word_indices_ext.cuda()
         tag_indices = tag_indices.cuda()
         tag_indices_ext = tag_indices_ext.cuda()
+        model = model.cuda()
 
     optimizer.zero_grad()
 
