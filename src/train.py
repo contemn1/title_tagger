@@ -1,17 +1,18 @@
+import argparse
 import logging
 import os
 import time
 from collections import namedtuple
 
-import torch
 import numpy as np
+import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
-from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD
-from src.data_util import read_file, build_dict_from_iterator
-from src.data_util import build_word_index_mapping
 from src.custom_dataset import TextIndexDataset
+from src.data_util import build_word_index_mapping
+from src.data_util import read_file, build_dict_from_iterator
+from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD
 
 
 def init_model(opt):
@@ -148,10 +149,6 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
             tag_indices.contiguous().view(-1)
         )
     else:
-        if decoder_log_probs.size(1) != tag_indices_ext.size(1):
-            print("predicted sequence length {0}".format(decoder_log_probs.size(1)))
-            print("actual sequence length {0}".format(tag_indices_ext.size(1)))
-
         loss = criterion(
             decoder_log_probs.contiguous().view(-1,
                                                 opt.vocab_size + max_oov_number),
@@ -202,12 +199,16 @@ def init_optimizer_criterion(model, opt):
     criterion = torch.nn.NLLLoss(ignore_index=PAD_WORD)
 
     if opt.train_ml:
-        optimizer_ml = Adam(params=filter(lambda p: p.requires_grad, model.parameters()), lr=opt.learning_rate)
+        optimizer_ml = Adam(
+            params=filter(lambda p: p.requires_grad, model.parameters()),
+            lr=opt.learning_rate)
     else:
         optimizer_ml = None
 
     if opt.train_rl:
-        optimizer_rl = Adam(params=filter(lambda p: p.requires_grad, model.parameters()), lr=opt.learning_rate_rl)
+        optimizer_rl = Adam(
+            params=filter(lambda p: p.requires_grad, model.parameters()),
+            lr=opt.learning_rate_rl)
     else:
         optimizer_rl = None
 
@@ -217,8 +218,79 @@ def init_optimizer_criterion(model, opt):
     return optimizer_ml, optimizer_rl, criterion
 
 
+def init_argument_parser():
+    parser = argparse.ArgumentParser(description="PyTorch MNIST Example")
+    parser.add_argument("--training-path", type=str, metavar="N",
+                        help="type of attention general, dot or concat")
+
+    parser.add_argument("--batch-size", type=int, default=64, metavar="N",
+                        help="input batch size for training (default: 64)")
+
+    parser.add_argument("--word-vec-size", type=int, default=300, metavar="N",
+                        help="dimension of word embedding")
+
+    parser.add_argument("--enc-layers", type=int, default=1, metavar="N",
+                        help="number of layers of encoder RNNs")
+
+    parser.add_argument("--dec-layers", type=int, default=1, metavar="N",
+                        help="number of layers of decoder RNNs")
+
+    parser.add_argument("--dropout", type=float, default=0.5, metavar="N",
+                        help="dropout rate")
+
+    parser.add_argument("--rnn-size", type=int, default=300, metavar="N",
+                        help="hidden size of RNN cell")
+
+    parser.add_argument("--bidirectional", type=bool, default=True, metavar="N",
+                        help="whether to use bidirectional RNN")
+
+    parser.add_argument("--attention-mode", type=str, metavar="N",
+                        default="general",
+                        help="type of attention general, dot or concat")
+
+    parser.add_argument("--copy-attention", type=bool, metavar="N",
+                        default=True, help="type of attention")
+
+    parser.add_argument("--input-feeding", type=bool, default=False,
+                        metavar="N",
+                        help="whether to use input feeding")
+
+    parser.add_argument("--copy-input-feeding", type=bool, default=True,
+                        metavar="N",
+                        help="whether to use copy input feeding")
+
+    parser.add_argument("--copy-mode", type=str, default="general",
+                        metavar="N",
+                        help="same as attention mode")
+
+    parser.add_argument("--reuse-copy-attn", type=bool, default=True,
+                        metavar="N",
+                        help="whether to use intra decoder attention as copy attention")
+
+    parser.add_argument("--train-ml", type=bool, default=True,
+                        metavar="N",
+                        help="whether to use maximum log likelihood in loss function")
+
+    parser.add_argument("--train-rl", type=bool, default=True,
+                        metavar="N",
+                        help="whether to use self crictic in loss function")
+
+    parser.add_argument("--learning-rate", type=float, default=0.001, metavar="N",
+                        help="learning rate for maximum likelihood")
+
+    parser.add_argument("--learning-rate-rl", type=float, default=0.001,
+                        metavar="N",
+                        help="learning rate for reinforcement learning")
+
+    parser.add_argument("--max-grad-norm", type=float, default=4.0, metavar="N",
+                        help="dropout rate")
+
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
-    path = "/home/zxj/Downloads/sorted_result_test.txt"
+    opt = init_argument_parser()
+    path = opt.training_path
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
@@ -235,26 +307,7 @@ if __name__ == '__main__':
     data_loader = DataLoader(text_dataset, batch_size=batch_size_train,
                              shuffle=True,
                              collate_fn=text_dataset.collate_fn_one2one)
-    Params = namedtuple("Parameters",
-                        ["vocab_size", "word_vec_size", "bidirectional",
-                         "rnn_size",
-                         "batch_size", "enc_layers", "dec_layers", "dropout",
-                         "attention_mode", "input_feeding", "copy_attention",
-                         "copy_mode", "copy_input_feeding", "reuse_copy_attn",
-                         "must_teacher_forcing", "train_ml", "train_rl",
-                         "learning_rate", "learning_rate_rl", "max_grad_norm"],
-                        verbose=False)
-
-    opt = Params(vocab_size=len(word_index_map), word_vec_size=300,
-                 bidirectional=True,
-                 rnn_size=300, batch_size=batch_size_train, enc_layers=1,
-                 dec_layers=1,
-                 dropout=0.5, attention_mode="general", input_feeding=False,
-                 copy_input_feeding=True,
-                 copy_attention=True, copy_mode="general", reuse_copy_attn=True,
-                 must_teacher_forcing=False, train_ml=True, train_rl=True,
-                 learning_rate=0.0001, learning_rate_rl=0.0001,
-                 max_grad_norm=4.0)
+    opt.vocab_size = len(word_index_map)
 
     size = 0
     model = Seq2SeqLSTMAttention(opt)
@@ -262,4 +315,6 @@ if __name__ == '__main__':
 
     for _ in range(100):
         for batch in data_loader:
-            train_one_batch(batch, model, optimizer_ml, forward_ml, criterion, opt)
+            train_one_batch(batch, model, optimizer_ml, forward_ml, criterion,
+                            opt)
+    
