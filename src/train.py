@@ -123,7 +123,6 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     if torch.cuda.is_available():
         word_indices = word_indices.cuda()
         word_indices_ext = word_indices_ext.cuda()
-        word_length = word_length.cuda()
         tag_indices = tag_indices.cuda()
         tag_indices_ext = tag_indices_ext.cuda()
 
@@ -214,7 +213,7 @@ def init_optimizer_criterion(model, opt):
 
 
 if __name__ == '__main__':
-    path = "/Users/zxj/Downloads/sorted_result_test.txt"
+    path = "/home/zxj/Downloads/sorted_result_test.txt"
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
@@ -257,5 +256,4 @@ if __name__ == '__main__':
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
     for batch in data_loader:
-        print(batch[3].size(1) == batch[4].size(1))
         train_one_batch(batch, model, optimizer_ml, forward_ml, criterion, opt)
