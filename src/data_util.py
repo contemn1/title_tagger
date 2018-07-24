@@ -1,5 +1,8 @@
+from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
+
+
 import io
 import logging
 import sys
@@ -17,12 +20,13 @@ def read_file(file_path, pre_process=lambda x: x, encoding="utf-8"):
         sys.exit(1)
 
 
-def output_iterator(file_path, iterator, post_propcess=lambda x: x[0] + "\t" + str(x[1]),
+def output_iterator(file_path, iterator,
+                    post_process=lambda x: x[0] + "\t" + str(x[1]),
                     encoding="utf-8"):
     try:
         with io.open(file_path, mode="w+", encoding=encoding) as file:
             for element in iterator:
-                file.write(post_propcess(element) + "\n")
+                file.write(post_process(element) + "\n")
 
     except IOError as err:
         logging.error("Failed to open file {0}".format(err))
