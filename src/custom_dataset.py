@@ -2,11 +2,9 @@ from __future__ import absolute_import
 
 import numpy as np
 import torch
-from torch.optim import Adam
 from torch.utils.data import Dataset
 
 from src.data_util import word_to_id
-from src.model import PAD_WORD
 
 
 class TextIndexDataset(Dataset):
