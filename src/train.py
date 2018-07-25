@@ -276,7 +276,7 @@ def init_argument_parser():
 
     parser.add_argument("--max-grad-norm", type=float, default=4.0, metavar="N",
                         help="dropout rate")
-    
+
     parser.add_argument("--num-epoches", type=int, default=100, metavar="N",
                         help="number of epoches")
 
@@ -309,7 +309,7 @@ if __name__ == '__main__':
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
-    for _ in range(100):
+    for _ in range(opt.num_epoches):
         for batch in data_loader:
             train_one_batch(batch, model, optimizer_ml, forward_ml, criterion,
                             opt)
