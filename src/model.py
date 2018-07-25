@@ -522,7 +522,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 batch_size, src_len, trg_hidden_dim)
 
         # maximum length to unroll, ignore the last word (must be padding)
-        max_length = trg_inputs.size(1)
+        max_length = trg_inputs.size(1) - 1
 
         # Teacher Forcing
         self.current_batch += 1
@@ -530,13 +530,7 @@ class Seq2SeqLSTMAttention(nn.Module):
         Word Sampling
             (1) Feedforwarding RNN
         '''
-        if sampling == "teacher_forcing":
-            trg_input = trg_inputs[:, 0].unsqueeze(1)
-        else:
-            #  the first word should be SOS <s>
-            sos_batch = np.full((batch_size, 1), SOS, dtype=np.int64)
-            trg_input = torch.from_numpy(sos_batch)
-            trg_input = trg_input.cuda() if torch.cuda.is_available() else trg_input
+        trg_input = trg_inputs[:, 0].unsqueeze(1)
 
         decoder_log_probs = []
         attn_weights = []

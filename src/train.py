@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from src.custom_dataset import TextIndexDataset
 from src.data_util import build_word_index_mapping
 from src.data_util import read_file, build_dict_from_iterator
-from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD
+from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, SOS
 
 
 def init_model(opt):
@@ -123,13 +123,17 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     word_indices, word_indices_ext, word_length, tag_indices, \
     tag_indices_ext, oov_words_batch = data_batch
 
+    batch_size = tag_indices.size(0)
+    sos_padding = np.full((batch_size, 1), SOS, dtype=np.int64)
+    sos_padding = torch.from_numpy(sos_padding)
+    tag_indices = torch.cat((sos_padding, tag_indices), dim=1)
+
     max_oov_number = len(oov_words_batch)
     if torch.cuda.is_available():
         word_indices = word_indices.cuda()
         word_indices_ext = word_indices_ext.cuda()
         tag_indices = tag_indices.cuda()
         tag_indices_ext = tag_indices_ext.cuda()
-        model = model.cuda()
 
     optimizer.zero_grad()
 
@@ -272,6 +276,9 @@ def init_argument_parser():
 
     parser.add_argument("--max-grad-norm", type=float, default=4.0, metavar="N",
                         help="dropout rate")
+    
+    parser.add_argument("--num-epoches", type=int, default=100, metavar="N",
+                        help="number of epoches")
 
     return parser.parse_args()
 
@@ -290,15 +297,16 @@ if __name__ == '__main__':
                                                               min_freq=4)
 
     text_dataset = TextIndexDataset(word_index_map, word_list, tag_list)
-
-    batch_size_train = 64
-    data_loader = DataLoader(text_dataset, batch_size=batch_size_train,
+    data_loader = DataLoader(text_dataset, batch_size=opt.batch_size,
                              shuffle=True,
                              collate_fn=text_dataset.collate_fn_one2one)
     opt.vocab_size = len(word_index_map)
 
     size = 0
     model = Seq2SeqLSTMAttention(opt)
+    if torch.cuda.is_available():
+        model = model.cuda()
+
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
     for _ in range(100):
