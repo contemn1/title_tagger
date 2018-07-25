@@ -311,5 +311,5 @@ if __name__ == '__main__':
 
     for _ in range(opt.num_epoches):
         for batch in data_loader:
-            train_one_batch(batch, model, optimizer_ml, forward_ml, criterion,
+            train_one_batch(batch, model, optimizer_rl, forward_rl, criterion,
                             opt)
