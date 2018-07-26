@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from src.custom_dataset import TextIndexDataset
 from src.data_util import build_word_index_mapping
 from src.data_util import read_file, build_dict_from_iterator
-from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, SOS
+from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
 
 
 def init_model(opt):
@@ -124,7 +124,7 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     tag_indices_ext, oov_words_batch = data_batch
 
     batch_size = tag_indices.size(0)
-    sos_padding = np.full((batch_size, 1), SOS, dtype=np.int64)
+    sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
     tag_indices = torch.cat((sos_padding, tag_indices), dim=1)
 
@@ -178,6 +178,28 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     optimizer.step()
 
     return loss.item(), decoder_log_probs
+
+
+def beam_search_one_batch(data_batch, model):
+    word_indices, word_indices_ext, word_length, tag_indices, \
+    tag_indices_ext, oov_words_batch = data_batch
+
+    batch_size = tag_indices.size(0)
+    sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
+    sos_padding = torch.from_numpy(sos_padding)
+    tag_indices = torch.cat((sos_padding, tag_indices), dim=1)
+    max_oov_number = len(oov_words_batch)
+
+    if torch.cuda.is_available():
+        word_indices = word_indices.cuda()
+        word_indices_ext = word_indices_ext.cuda()
+        tag_indices = tag_indices.cuda()
+        tag_indices_ext = tag_indices_ext.cuda()
+
+    with torch.no_grad():
+        model.beam_search(word_indices, word_length,
+                                            tag_indices, word_indices_ext,
+                                            oov_words_batch, 3, n_best=2)
 
 
 def init_optimizer_criterion(model, opt):
@@ -311,5 +333,7 @@ if __name__ == '__main__':
 
     for _ in range(opt.num_epoches):
         for batch in data_loader:
-            train_one_batch(batch, model, optimizer_rl, forward_rl, criterion,
+            train_one_batch(batch, model, optimizer_ml, forward_ml, criterion,
                             opt)
+            break
+        break

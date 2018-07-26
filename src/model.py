@@ -12,8 +12,10 @@ import torch.nn.functional as func
 from torch.autograd import Variable
 from torch.distributions.categorical import Categorical
 
+from src.beam_search import Beam
+
 PAD_WORD = 0
-SOS = 1
+BOS = 1
 EOS = 2
 UNK = 3
 
@@ -506,7 +508,6 @@ class Seq2SeqLSTMAttention(nn.Module):
         '''
         batch_size = trg_inputs.size(0)
         src_len = enc_context.size(1)
-        trg_len = trg_inputs.size(1)
         context_dim = enc_context.size(2)
         trg_hidden_dim = self.trg_hidden_dim
 
@@ -553,9 +554,7 @@ class Seq2SeqLSTMAttention(nn.Module):
             dec_input = self.merge_decode_inputs(trg_emb, h_tilde, copy_h_tilde)
 
             # run RNN decoder with inputs (trg_len first)
-            decoder_output, dec_hidden = self.decoder(
-                dec_input, dec_hidden
-            )
+            decoder_output, dec_hidden = self.decoder(dec_input, dec_hidden)
 
             '''
             (2) Standard Attention
@@ -722,118 +721,92 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         return decoder_log_probs
 
-    def generate(self, trg_input, dec_hidden, enc_context, src_map=None,
-                 oov_list=None, max_len=1,
-                 return_attention=False):
-        '''
-        Given the initial input, state and the source contexts, return the top K restuls for each time step
-        :param trg_input: just word indexes of target texts (usually zeros indicating BOS <s>)
-        :param dec_hidden: hidden states for decoder RNN to start with
-        :param enc_context: context encoding vectors
-        :param src_map: required if it's copy model
-        :param oov_list: required if it's copy model
-        :param k (deprecated): Top K to return
-        :param feed_all_timesteps: it's one-step predicting or feed all inputs to run through all the time steps
-        :param get_attention: return attention vectors?
-        :return:
-        '''
-        # assert isinstance(input_list, list) or isinstance(input_list, tuple)
-        # assert isinstance(input_list[0], list) or isinstance(input_list[0], tuple)
-        batch_size = trg_input.size(0)
+    def beam_search(self, input_src, input_src_len, input_trg, input_src_ext,
+                    oov_lists, beam_size=3, n_best=2):
+        enc_context, (src_h_t, src_c_t) = self.encode(input_src, input_src_len)
+
+        batch_size = input_trg.size(0)
         src_len = enc_context.size(1)
-        trg_len = trg_input.size(1)
         context_dim = enc_context.size(2)
         trg_hidden_dim = self.trg_hidden_dim
+        max_length = input_trg.size(1) - 1
 
-        h_tilde = Variable(torch.zeros(batch_size, 1,
-                                       trg_hidden_dim)).cuda() if torch.cuda.is_available() else Variable(
-            torch.zeros(batch_size, 1, trg_hidden_dim))
-        copy_h_tilde = Variable(torch.zeros(batch_size, 1,
-                                            trg_hidden_dim)).cuda() if torch.cuda.is_available() else Variable(
-            torch.zeros(batch_size, 1, trg_hidden_dim))
-        attn_weights = []
-        copy_weights = []
-        log_probs = []
+        init_hidden = self.init_decoder_state(src_h_t, src_c_t)
 
-        # enc_context has to be reshaped before dot attention
-        # (batch_size, src_len, context_dim) -> (batch_size, src_len, trg_hidden_dim)
         if self.attention_layer.method == 'dot':
             enc_context = nn.Tanh()(
                 self.encoder2decoder_hidden(
                     enc_context.contiguous().view(-1, context_dim))).view(
                 batch_size, src_len, trg_hidden_dim)
 
-        for i in range(max_len):
-            # print('TRG_INPUT: %s' % str(trg_input.size()))
-            # print(trg_input.data.numpy())
-            trg_emb = self.embedding(
-                trg_input)  # (batch_size, trg_len = 1, emb_dim)
+        enc_context = enc_context.repeat(beam_size, 1, 1)
+        input_src_ext = input_src_ext.repeat(beam_size, 1)
+        dec_hidden = (init_hidden[0].repeat(1, beam_size, 1),
+                      init_hidden[1].repeat(1, beam_size, 1))
 
-            # Input-feeding, attentional vectors h˜t are concatenated with inputs at the next time steps
+        beam_list = [Beam(beam_size, n_best=n_best) for _ in range(batch_size)]
+
+        decoder_log_probs = []
+        predicted_indices = []
+
+        h_tilde = torch.zeros(batch_size * beam_size, 1, trg_hidden_dim)
+        copy_h_tilde = torch.zeros(batch_size * beam_size, 1, trg_hidden_dim)
+        if torch.cuda.is_available():
+            h_tilde = h_tilde.cuda()
+            copy_h_tilde = copy_h_tilde.cuda()
+
+        for di in range(max_length):
+            if all((b.done() for b in beam_list)):
+                break
+
+            dec_input = torch.stack([b.get_current_state() for b in beam_list]) \
+                .t().contiguous().view(-1)
+
+            trg_emb = self.embedding(dec_input).unsqueeze(
+                1)  # (batch_size, 1, embed_dim)
+
             dec_input = self.merge_decode_inputs(trg_emb, h_tilde, copy_h_tilde)
 
-            # (seq_len, batch_size, hidden_size * num_directions)
-            decoder_output, dec_hidden = self.decoder(
-                dec_input, dec_hidden
-            )
+            decoder_output, dec_hidden = self.decoder(dec_input, dec_hidden)
 
-            # Get the h_tilde (hidden after attention) and attention weights
             h_tilde, attn_weight, attn_logit = self.attention_layer(
-                decoder_output.permute(1, 0, 2),
-                enc_context)
+                decoder_output.permute(1, 0, 2), enc_context)
 
-            # compute the output decode_logit and read-out as probs: p_x = Softmax(W_s * h_tilde)
-            # (batch_size, trg_len, trg_hidden_size) -> (batch_size, 1, vocab_size)
-            decoder_logit = self.decoder2vocab(h_tilde.view(-1, trg_hidden_dim))
+            decoder_logit = self.decoder2vocab(
+                h_tilde.view(-1, trg_hidden_dim)).view(
+                batch_size * beam_size, 1, -1)
 
-            if not self.copy_attention:
-                decoder_log_prob = torch.nn.functional.log_softmax(
-                    decoder_logit, dim=-1).view(
-                    batch_size, 1, self.vocab_size)
-            else:
-                decoder_logit = decoder_logit.view(batch_size, 1,
-                                                   self.vocab_size)
+            if self.copy_attention:
                 # copy_weights and copy_logits is (batch_size, trg_len, src_len)
                 if not self.reuse_copy_attn:
                     copy_h_tilde, copy_weight, copy_logit = self.copy_attention_layer(
                         decoder_output.permute(1, 0, 2), enc_context)
                 else:
                     copy_h_tilde, copy_weight, copy_logit = h_tilde, attn_weight, attn_logit
-                copy_weights.append(
-                    copy_weight.permute(1, 0, 2))  # (1, batch_size, src_len)
-                # merge the generative and copying probs (batch_size, 1, vocab_size + max_unk_word)
+
+                # merge the generative and copying probs (batch_size, 1, vocab_size + max_oov_number)
                 decoder_log_prob = self.merge_copy_probs(decoder_logit,
-                                                         copy_logit, src_map,
-                                                         oov_list)
-
-            # Prepare for the next iteration, get the top word, top_idx and next_index are (batch_size, K)
-            top_1_v, top_1_idx = decoder_log_prob.data.topk(1,
-                                                            dim=-1)  # (batch_size, 1)
-            trg_input = Variable(top_1_idx.squeeze(2))
-            # trg_input           = Variable(top_1_idx).cuda() if torch.cuda.is_available() else Variable(top_1_idx) # (batch_size, 1)
-
-            # append to return lists
-            log_probs.append(decoder_log_prob.permute(1, 0,
-                                                      2))  # (1, batch_size, vocab_size)
-            attn_weights.append(
-                attn_weight.permute(1, 0, 2))  # (1, batch_size, src_len)
-
-        # permute to trg_len first, otherwise the cat operation would mess up things
-        log_probs = torch.cat(log_probs, 0).permute(1, 0,
-                                                    2)  # (batch_size, max_len, K)
-        attn_weights = torch.cat(attn_weights, 0).permute(1, 0,
-                                                          2)  # (batch_size, max_len, src_seq_len)
-
-        # Only return the hidden vectors of the last time step.
-        #   tuple of (num_layers * num_directions, batch_size, trg_hidden_dim)=(1, batch_size, trg_hidden_dim)
-
-        # Return final outputs, hidden states, and attention weights (for visualization)
-        if return_attention:
-            if not self.copy_attention:
-                return log_probs, dec_hidden, attn_weights
+                                                         copy_logit, input_src_ext,
+                                                         oov_lists)
             else:
-                copy_weights = torch.cat(copy_weights, 0).permute(1, 0,
-                                                                  2)  # (batch_size, max_len, src_seq_len)
-                return log_probs, dec_hidden, (attn_weights, copy_weights)
-        else:
-            return log_probs, dec_hidden
+                decoder_log_prob = torch.nn.functional.log_softmax(
+                    decoder_logit, dim=-1).view(
+                    batch_size, -1, self.vocab_size)
+
+
+            decoder_log_prob = decoder_log_prob.unsqueeze(1)\
+                .view(beam_size, batch_size, -1)
+
+            for index, beam in enumerate(beam_list):
+                beam.advance(decoder_log_prob[:, index])
+                beam.beam_update(dec_hidden, index)
+
+        all_hypos = []
+        for beam in beam_list:
+            scores, ks = beam.sort_finished(minimum=n_best)
+            hyps = []
+            for i, (times, k) in enumerate(ks[:n_best]):
+                hyp = beam.get_hypothesis(times, k)
+                hyps.append(hyp)
+
+            all_hypos.append(hyps)
