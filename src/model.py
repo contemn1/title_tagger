@@ -696,9 +696,10 @@ class Seq2SeqLSTMAttention(nn.Module):
                                          :self.vocab_size]
         flattened_decoder_logits_extend = flattened_decoder_logits[:,
                                           self.vocab_size:]
-        padding_mask = torch.from_numpy(
-            np.full(shape=(batch_size * max_length, max_oov_number),
-                    fill_value=float("-inf"), dtype=np.float32))
+
+        content = np.full(shape=(batch_size * max_length, max_oov_number),
+                          fill_value=float("-inf"), dtype=np.float32)
+        padding_mask = torch.from_numpy(content)
 
         if torch.cuda.is_available():
             padding_mask = padding_mask.cuda()
@@ -784,15 +785,15 @@ class Seq2SeqLSTMAttention(nn.Module):
 
                 # merge the generative and copying probs (batch_size, 1, vocab_size + max_oov_number)
                 decoder_log_prob = self.merge_copy_probs(decoder_logit,
-                                                         copy_logit, input_src_ext,
+                                                         copy_logit,
+                                                         input_src_ext,
                                                          oov_lists)
             else:
                 decoder_log_prob = torch.nn.functional.log_softmax(
                     decoder_logit, dim=-1).view(
                     batch_size, -1, self.vocab_size)
 
-
-            decoder_log_prob = decoder_log_prob.unsqueeze(1)\
+            decoder_log_prob = decoder_log_prob.unsqueeze(1) \
                 .view(beam_size, batch_size, -1)
 
             for index, beam in enumerate(beam_list):

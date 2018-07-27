@@ -246,6 +246,7 @@ def train_model(model, optimizer, criterion,
                 for batch_valid in valid_data_loader:
                     loss_valid = inference_one_batch(batch_valid,
                                                      model, criterion)
+
                     valid_loss_epoch.append(loss_valid)
 
                 loss_epoch_mean = np.mean(valid_loss_epoch)
