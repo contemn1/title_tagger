@@ -2,6 +2,7 @@
 """
 Python File Template
 """
+from __future__ import absolute_import
 import logging
 import time
 
@@ -746,9 +747,6 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         beam_list = [Beam(beam_size, n_best=n_best) for _ in range(batch_size)]
 
-        decoder_log_probs = []
-        predicted_indices = []
-
         h_tilde = torch.zeros(batch_size * beam_size, 1, trg_hidden_dim)
         copy_h_tilde = torch.zeros(batch_size * beam_size, 1, trg_hidden_dim)
         if torch.cuda.is_available():
@@ -802,6 +800,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 beam.beam_update(dec_hidden, index)
 
         all_hypos = []
+        all_scores = []
         for beam in beam_list:
             scores, ks = beam.sort_finished(minimum=n_best)
             hyps = []
@@ -809,4 +808,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 hyp = beam.get_hypothesis(times, k)
                 hyps.append(hyp)
 
-            all_hypos.append(hyps)
+            all_hypos.append(hyps[0])
+            all_scores.append(scores[0])
+
+        return all_hypos, all_scores

@@ -1,7 +1,10 @@
+from __future__ import absolute_import
 import argparse
+import copy
 import logging
 import os
 import time
+import multiprocessing
 
 import numpy as np
 import torch
@@ -112,6 +115,48 @@ def forward_rl(model, word_indices, word_length, tag_indices,
     return sampling_log_probs, sampling_reward - baseline_reward
 
 
+def prepare_data(word_indices, word_indices_ext,
+                 tag_indices, tag_indices_ext):
+    batch_size = tag_indices.size(0)
+    sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
+    sos_padding = torch.from_numpy(sos_padding)
+    tag_indices = torch.cat((sos_padding, tag_indices), dim=1)
+
+    if torch.cuda.is_available():
+        word_indices = word_indices.cuda()
+        word_indices_ext = word_indices_ext.cuda()
+        tag_indices = tag_indices.cuda()
+        tag_indices_ext = tag_indices_ext.cuda()
+    return word_indices, word_indices_ext, tag_indices, tag_indices_ext
+
+
+def inference_one_batch(data_batch, model, criterion):
+    word_indices, word_indices_ext, word_length, tag_indices, \
+    tag_indices_ext, oov_words_batch = data_batch
+
+    max_oov_number = len(oov_words_batch)
+
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext = prepare_data(
+        word_indices, word_indices_ext, tag_indices, tag_indices_ext)
+    with torch.no_grad():
+        decoder_log_probs, _, _ = model.forward(word_indices, word_length,
+                                                tag_indices, word_indices_ext,
+                                                oov_words_batch, "greedy")
+        if not opt.copy_attention:
+            loss = criterion(
+                decoder_log_probs.contiguous().view(-1, opt.vocab_size),
+                tag_indices.contiguous().view(-1)
+            )
+        else:
+            loss = criterion(
+                decoder_log_probs.contiguous().view(-1,
+                                                    opt.vocab_size + max_oov_number),
+                tag_indices_ext.contiguous().view(-1)
+            )
+
+    return loss.item()
+
+
 def train_one_batch(data_batch, model, optimizer, custom_forward,
                     criterion, opt):
     """
@@ -123,17 +168,10 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     word_indices, word_indices_ext, word_length, tag_indices, \
     tag_indices_ext, oov_words_batch = data_batch
 
-    batch_size = tag_indices.size(0)
-    sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
-    sos_padding = torch.from_numpy(sos_padding)
-    tag_indices = torch.cat((sos_padding, tag_indices), dim=1)
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext = prepare_data(
+        word_indices, word_indices_ext, tag_indices, tag_indices_ext)
 
     max_oov_number = len(oov_words_batch)
-    if torch.cuda.is_available():
-        word_indices = word_indices.cuda()
-        word_indices_ext = word_indices_ext.cuda()
-        tag_indices = tag_indices.cuda()
-        tag_indices_ext = tag_indices_ext.cuda()
 
     optimizer.zero_grad()
 
@@ -162,7 +200,6 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
         "--loss calculation- {0} seconds -- ".format(time.time() - start_time))
 
     loss *= reward
-    print(loss)
     start_time = time.time()
     loss.backward()
     logging.info("--backward- {0} seconds -- ".format(time.time() - start_time))
@@ -177,7 +214,72 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
 
     optimizer.step()
 
-    return loss.item(), decoder_log_probs
+    return loss.data.item(), decoder_log_probs
+
+
+def train_model(model, optimizer, criterion,
+                train_data_loader, valid_data_loader, opt):
+    valid_history_losses = []
+    best_loss = 0.0  # for f-score
+    stop_increasing = 0
+
+    early_stop_flag = False
+    total_batch = 0
+    for epoch in range(opt.start_epoch, opt.num_epoches):
+        if early_stop_flag:
+            break
+        epoch += 1
+        train_ml_losses = []
+        best_model = model
+        for batch_i, batch in enumerate(train_data_loader):
+            model.train()
+            total_batch += 1
+            loss_ml, decoder_log_probs = train_one_batch(batch, model,
+                                                         optimizer,
+                                                         forward_ml, criterion,
+                                                         opt)
+            train_ml_losses.append(loss_ml)
+
+            if total_batch > 1 and total_batch % opt.run_valid_every == 0:
+                valid_loss_epoch = []
+                for batch_valid in valid_data_loader:
+                    loss_valid = inference_one_batch(batch_valid,
+                                                     model, criterion)
+                    valid_loss_epoch.append(loss_valid)
+
+                loss_epoch_mean = np.mean(valid_loss_epoch)
+                valid_history_losses.append(loss_epoch_mean)
+
+                if loss_epoch_mean < best_loss:
+                    best_model = copy.deepcopy(model)
+                    best_optimizer = copy.deepcopy(optimizer)
+                    best_loss = loss_epoch_mean
+                    stop_increasing = 0
+                else:
+                    stop_increasing += 1
+
+                if total_batch > 1 and (total_batch % opt.save_model_every == 0):
+                    save_model(opt.model_path, epoch, batch, best_model,
+                               best_optimizer)
+
+                if stop_increasing >= opt.early_stop_tolerance:
+                    message = "Have not increased for {0} epoches, early stop training"
+                    logging.info(message.format(epoch))
+                    early_stop_flag = True
+                    break
+
+
+def save_model(model_directory, epoch, batch, model, optimizer):
+    model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}".format(epoch, batch)
+    model_path = os.path.join(model_directory, model_name)
+    logging.info("save model to {0}".format(model_path))
+    state = {
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict()
+    }
+    torch.save(state, model_path)
+
 
 
 def beam_search_one_batch(data_batch, model):
@@ -188,18 +290,17 @@ def beam_search_one_batch(data_batch, model):
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
     tag_indices = torch.cat((sos_padding, tag_indices), dim=1)
-    max_oov_number = len(oov_words_batch)
 
     if torch.cuda.is_available():
         word_indices = word_indices.cuda()
         word_indices_ext = word_indices_ext.cuda()
         tag_indices = tag_indices.cuda()
-        tag_indices_ext = tag_indices_ext.cuda()
 
     with torch.no_grad():
-        model.beam_search(word_indices, word_length,
-                                            tag_indices, word_indices_ext,
-                                            oov_words_batch, 3, n_best=2)
+        all_hypos, all_scores = model.beam_search(word_indices, word_length,
+                                                  tag_indices, word_indices_ext,
+                                                  oov_words_batch, 3, n_best=2)
+    return all_hypos, all_scores
 
 
 def init_optimizer_criterion(model, opt):
@@ -252,6 +353,9 @@ def init_argument_parser():
     parser.add_argument("--dropout", type=float, default=0.5, metavar="N",
                         help="dropout rate")
 
+    parser.add_argument("--model-path", type=str, metavar="N",
+                        help="path to save model")
+
     parser.add_argument("--rnn-size", type=int, default=300, metavar="N",
                         help="hidden size of RNN cell")
 
@@ -289,7 +393,8 @@ def init_argument_parser():
                         metavar="N",
                         help="whether to use self crictic in loss function")
 
-    parser.add_argument("--learning-rate", type=float, default=0.001, metavar="N",
+    parser.add_argument("--learning-rate", type=float, default=0.001,
+                        metavar="N",
                         help="learning rate for maximum likelihood")
 
     parser.add_argument("--learning-rate-rl", type=float, default=0.001,
@@ -302,6 +407,20 @@ def init_argument_parser():
     parser.add_argument("--num-epoches", type=int, default=100, metavar="N",
                         help="number of epoches")
 
+    parser.add_argument("--start-epoch", type=int, default=1, metavar="N",
+                        help="number of start epoches")
+
+    parser.add_argument("--run-valid-every", type=int, default=5000, metavar="N",
+                        help="number of epochs to run validation set")
+
+    parser.add_argument("--save-model-every", type=int, default=10000, metavar="N",
+                        help="number of epochs to run validation set")
+
+
+    parser.add_argument("--early-stop-tolerance", type=int, default=20, metavar="N",
+                        help="number of epochs to run validation set")
+
+
     return parser.parse_args()
 
 
@@ -312,16 +431,33 @@ if __name__ == '__main__':
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
                  len(ele) == 2]
+    training_size = int(len(file_list) * 0.8)
     tag_list = [tags for tags, _ in file_list]
     word_list = [words for _, words in file_list]
     word_dict = build_dict_from_iterator(file_list)
     word_index_map, index_word_map = build_word_index_mapping(word_dict,
                                                               min_freq=4)
 
-    text_dataset = TextIndexDataset(word_index_map, word_list, tag_list)
-    data_loader = DataLoader(text_dataset, batch_size=opt.batch_size,
-                             shuffle=True,
-                             collate_fn=text_dataset.collate_fn_one2one)
+    num_threads = multiprocessing.cpu_count()
+    text_dataset_train = TextIndexDataset(word_index_map,
+                                          word_list[:training_size],
+                                          tag_list[:training_size])
+    text_dataset_valid = TextIndexDataset(word_index_map,
+                                         word_list[training_size:],
+                                         tag_list[training_size:])
+
+    train_loader = DataLoader(text_dataset_train, batch_size=opt.batch_size,
+                              shuffle=True,
+                              collate_fn=text_dataset_train.collate_fn_one2one,
+                              num_workers=num_threads,
+                              pin_memory=torch.cuda.is_available())
+
+    valid_loader = DataLoader(text_dataset_valid, batch_size=opt.batch_size,
+                              shuffle=True,
+                              collate_fn=text_dataset_valid.collate_fn_one2one,
+                              num_workers=num_threads,
+                              pin_memory=torch.cuda.is_available())
+
     opt.vocab_size = len(word_index_map)
 
     size = 0
@@ -331,9 +467,5 @@ if __name__ == '__main__':
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
-    for _ in range(opt.num_epoches):
-        for batch in data_loader:
-            train_one_batch(batch, model, optimizer_ml, forward_ml, criterion,
-                            opt)
-            break
-        break
+    train_model(model, optimizer_ml, criterion, train_loader, valid_loader,
+                opt)

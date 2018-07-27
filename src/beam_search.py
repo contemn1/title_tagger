@@ -58,20 +58,21 @@ class Beam(object):
     #
     # Returns: True if beam search is complete.
 
-    def advance(self, workd_lk):
+    def advance(self, word_lk):
         """Advance the beam."""
-        num_words = workd_lk.size(1)
+        num_words = word_lk.size(1)
 
         # Sum the previous scores.
         if len(self.previous_paths) > 0:
-            beam_lk = workd_lk + self.scores.unsqueeze(1).expand_as(workd_lk)
+            word_lk[:, 0] += -1e10
+            beam_lk = word_lk + self.scores.unsqueeze(1).expand_as(word_lk)
 
             for i in range(self.next_inputs[-1].size(0)):
                 if self.next_inputs[-1][i] == self.eos:
-                    beam_lk[i] = -1e20
+                    beam_lk[i] = -1e10
 
         else:
-            beam_lk = workd_lk
+            beam_lk = word_lk
 
         flat_beam_lk = beam_lk.contiguous().view(-1)
         best_scores, best_scores_id = flat_beam_lk.topk(self.size, 0, True, True)
