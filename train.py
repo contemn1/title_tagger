@@ -230,8 +230,6 @@ def train_model(model, optimizer, criterion,
             break
         epoch += 1
         train_ml_losses = []
-        best_model = model
-        best_optimizer = optimizer
         for batch_i, batch in enumerate(train_data_loader):
             model.train()
             total_batch += 1
