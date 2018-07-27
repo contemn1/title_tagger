@@ -260,7 +260,7 @@ def train_model(model, optimizer, criterion,
                     stop_increasing += 1
 
                 if total_batch > 1 and (total_batch % opt.save_model_every == 0):
-                    save_model(opt.model_path, epoch, batch, best_model,
+                    save_model(opt.model_path, epoch, batch_i, best_model,
                                best_optimizer)
 
                 if stop_increasing >= opt.early_stop_tolerance:
