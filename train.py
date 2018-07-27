@@ -243,6 +243,7 @@ def train_model(model, optimizer, criterion,
                     save_model(opt.model_path, epoch, batch_i, model,
                                optimizer)
 
+
 def save_model(model_directory, epoch, batch, model, optimizer):
     model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}".format(epoch, batch)
     model_path = os.path.join(model_directory, model_name)
@@ -253,7 +254,6 @@ def save_model(model_directory, epoch, batch, model, optimizer):
         "optimizer_state_dict": optimizer.state_dict()
     }
     torch.save(state, model_path)
-
 
 
 def beam_search_one_batch(data_batch, model):
