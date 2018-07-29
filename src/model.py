@@ -557,6 +557,7 @@ class Seq2SeqLSTMAttention(nn.Module):
             # run RNN decoder with inputs (trg_len first)
             decoder_output, dec_hidden = self.decoder(dec_input, dec_hidden)
 
+
             '''
             (2) Standard Attention
             '''

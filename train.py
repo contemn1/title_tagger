@@ -15,7 +15,7 @@ from src.custom_dataset import TextIndexDataset
 from src.data_util import build_word_index_mapping
 from src.data_util import read_file, build_dict_from_iterator
 from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
-
+from torch import autograd
 
 def init_model(opt):
     logging.info(
@@ -66,6 +66,7 @@ def forward_ml(model, word_indices, word_length, tag_indices,
     decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                             tag_indices, word_indices_ext,
                                             oov_words_batch)
+    autograd.backward()
     return decoder_log_probs, 1.0
 
 
@@ -142,6 +143,8 @@ def inference_one_batch(data_batch, model, criterion):
         decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                                 tag_indices, word_indices_ext,
                                                 oov_words_batch, "greedy")
+
+
         if not opt.copy_attention:
             loss = criterion(
                 decoder_log_probs.contiguous().view(-1, opt.vocab_size),
@@ -154,7 +157,7 @@ def inference_one_batch(data_batch, model, criterion):
                 tag_indices_ext.contiguous().view(-1)
             )
 
-    return loss.item()
+        return loss.item()
 
 
 def train_one_batch(data_batch, model, optimizer, custom_forward,
@@ -441,5 +444,6 @@ if __name__ == '__main__':
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
-    train_model(model, optimizer_ml, criterion, train_loader, valid_loader,
-                opt)
+    for batch in valid_loader:
+        print(inference_one_batch(batch, model, criterion))
+        
