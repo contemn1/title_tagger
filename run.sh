@@ -1,6 +1,5 @@
-sudo pip install numpy
-python train.py --training-path "s3://testbucket/jarvis-data/zhuxunjie01_sx/train/" \
+python3 train.py --training-path "/home/zxj/Downloads/sorted_result_test.txt"  \
 --batch-size 128 \
---model-path "s3://testbucket/jarvis/zhuxunjie01_sx/" \
---run-valid-every 10000 --save-model-every 200000 \
+--model-path "/home/zxj/Downloads" \
+--run-valid-every 10 --save-model-every 200000 \
 --num-epoches 1000

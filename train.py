@@ -66,7 +66,6 @@ def forward_ml(model, word_indices, word_length, tag_indices,
     decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                             tag_indices, word_indices_ext,
                                             oov_words_batch)
-    autograd.backward()
     return decoder_log_probs, 1.0
 
 
@@ -249,6 +248,7 @@ def train_model(model, optimizer, criterion,
                 for batch_valid in valid_data_loader:
                     loss_valid = inference_one_batch(batch_valid,
                                                      model, criterion)
+                    print(loss_valid)
                     valid_loss_epoch.append(loss_valid)
 
                 loss_epoch_mean = np.mean(valid_loss_epoch)
