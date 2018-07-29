@@ -225,6 +225,8 @@ def train_model(model, optimizer, criterion,
     valid_history_losses = []
     best_loss = 1000000.0  # for f-score
     stop_increasing = 0
+    best_model = model
+    best_optimizer = optimizer
 
     early_stop_flag = False
     total_batch = 0
@@ -242,9 +244,33 @@ def train_model(model, optimizer, criterion,
                                                          opt)
             train_ml_losses.append(loss_ml)
 
-            if total_batch > 1 and (total_batch % opt.save_model_every == 0):
-                    save_model(opt.model_path, epoch, batch_i, model,
-                               optimizer)
+            if total_batch > 1 and total_batch % opt.run_valid_every == 0:
+                valid_loss_epoch = []
+                for batch_valid in valid_data_loader:
+                    loss_valid = inference_one_batch(batch_valid,
+                                                     model, criterion)
+                    valid_loss_epoch.append(loss_valid)
+
+                loss_epoch_mean = np.mean(valid_loss_epoch)
+                valid_history_losses.append(loss_epoch_mean)
+
+                if loss_epoch_mean < best_loss:
+                    best_model = copy.deepcopy(model)
+                    best_optimizer = copy.deepcopy(optimizer)
+                    best_loss = loss_epoch_mean
+                    stop_increasing = 0
+                else:
+                    stop_increasing += 1
+
+                if total_batch > 1 and (total_batch % opt.save_model_every == 0):
+                    save_model(opt.model_path, epoch, batch_i, best_model,
+                               best_optimizer)
+
+                if stop_increasing >= opt.early_stop_tolerance:
+                    message = "Have not increased for {0} epoches, early stop training"
+                    logging.info(message.format(epoch))
+                    early_stop_flag = True
+                    break
 
 
 def save_model(model_directory, epoch, batch, model, optimizer):
@@ -444,6 +470,5 @@ if __name__ == '__main__':
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
-    for batch in valid_loader:
-        print(inference_one_batch(batch, model, criterion))
-        
+    train_model(model, optimizer_ml, criterion, train_loader,
+                valid_loader, opt)
