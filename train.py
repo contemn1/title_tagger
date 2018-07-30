@@ -17,6 +17,7 @@ from src.data_util import read_file, build_dict_from_iterator
 from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
 from torch import autograd
 
+
 def init_model(opt):
     logging.info(
         '======================  Model Parameters  =========================')
@@ -143,7 +144,6 @@ def inference_one_batch(data_batch, model, criterion):
                                                 tag_indices, word_indices_ext,
                                                 oov_words_batch, "greedy")
 
-
         if not opt.copy_attention:
             loss = criterion(
                 decoder_log_probs.contiguous().view(-1, opt.vocab_size),
@@ -250,7 +250,8 @@ def train_model(model, optimizer, criterion,
 
 
 def save_model(model_directory, epoch, batch, model, optimizer):
-    model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}".format(epoch, batch)
+    model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}".format(epoch,
+                                                                     batch)
     model_path = os.path.join(model_directory, model_name)
     logging.info("save model to {0}".format(model_path))
     state = {
@@ -389,16 +390,20 @@ def init_argument_parser():
     parser.add_argument("--start-epoch", type=int, default=1, metavar="N",
                         help="number of start epoches")
 
-    parser.add_argument("--run-valid-every", type=int, default=5000, metavar="N",
+    parser.add_argument("--run-valid-every", type=int, default=5000,
+                        metavar="N",
                         help="number of epochs to run validation set")
 
-    parser.add_argument("--save-model-every", type=int, default=10000, metavar="N",
+    parser.add_argument("--save-model-every", type=int, default=10000,
+                        metavar="N",
                         help="number of epochs to run validation set")
 
-
-    parser.add_argument("--early-stop-tolerance", type=int, default=20, metavar="N",
+    parser.add_argument("--early-stop-tolerance", type=int, default=20,
+                        metavar="N",
                         help="number of epochs to run validation set")
 
+    parser.add_argument("--min-word-freq", type=int, default=10,
+                        metavar="N", help="minimum word frequency")
 
     return parser.parse_args()
 
@@ -414,16 +419,16 @@ if __name__ == '__main__':
     tag_list = [tags for tags, _ in file_list]
     word_list = [words for _, words in file_list]
     word_dict = build_dict_from_iterator(file_list)
-    word_index_map, index_word_map = build_word_index_mapping(word_dict,
-                                                              min_freq=4)
+    word_index_map, index_word_map = build_word_index_mapping(
+        word_dict, min_freq=opt.min_word_freq)
 
     num_threads = multiprocessing.cpu_count()
     text_dataset_train = TextIndexDataset(word_index_map,
                                           word_list[:training_size],
                                           tag_list[:training_size])
     text_dataset_valid = TextIndexDataset(word_index_map,
-                                         word_list[training_size:],
-                                         tag_list[training_size:])
+                                          word_list[training_size:],
+                                          tag_list[training_size:])
 
     train_loader = DataLoader(text_dataset_train, batch_size=opt.batch_size,
                               shuffle=True,
