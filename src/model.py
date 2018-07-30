@@ -699,8 +699,8 @@ class Seq2SeqLSTMAttention(nn.Module):
                                           self.vocab_size:]
 
         content = np.full(shape=(batch_size * max_length, max_oov_number),
-                          fill_value=float("-inf"), dtype=np.float32)
-        padding_mask = torch.from_numpy(content).clone()
+                          fill_value=-1e10, dtype=np.float32)
+        padding_mask = torch.from_numpy(content)
 
         if torch.cuda.is_available():
             padding_mask = padding_mask.cuda()
