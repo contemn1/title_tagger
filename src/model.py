@@ -698,9 +698,8 @@ class Seq2SeqLSTMAttention(nn.Module):
         flattened_decoder_logits_extend = flattened_decoder_logits[:,
                                           self.vocab_size:]
 
-        content = np.full(shape=(batch_size * max_length, max_oov_number),
-                          fill_value=-1e10, dtype=np.float32)
-        padding_mask = torch.from_numpy(content)
+        padding_mask = torch.zeros([batch_size * max_length, max_oov_number])
+        padding_mask = padding_mask - 1e10
 
         if torch.cuda.is_available():
             padding_mask = padding_mask.cuda()

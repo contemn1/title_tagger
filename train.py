@@ -241,6 +241,7 @@ def train_model(model, optimizer, criterion,
                                                          optimizer,
                                                          forward_ml, criterion,
                                                          opt)
+            print("Loss for batch {0} is: {1}".format(batch_i, loss_ml))
             train_ml_losses.append(loss_ml)
 
             if total_batch > 1 and (total_batch % opt.save_model_every == 0):
