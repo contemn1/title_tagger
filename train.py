@@ -204,7 +204,7 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
 
     if loss != 1.0:
         loss *= reward
-    
+
     start_time = time.time()
     loss.backward()
     logging.info("--backward- {0} seconds -- ".format(time.time() - start_time))
@@ -218,9 +218,10 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
         logging.info('clip grad (%f -> %f)' % (pre_norm, after_norm))
 
     optimizer.step()
-    del decoder_log_probs
+    loss_output = loss.data.item()
+    del decoder_log_probs, loss
 
-    return loss.data.item()
+    return loss_output
 
 
 def train_model(model, optimizer, criterion,
