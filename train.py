@@ -1,13 +1,15 @@
 from __future__ import absolute_import
+
 import argparse
 import copy
 import logging
+import multiprocessing
 import os
 import time
-import multiprocessing
 
 import numpy as np
 import torch
+from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
@@ -15,7 +17,6 @@ from src.custom_dataset import TextIndexDataset
 from src.data_util import build_word_index_mapping
 from src.data_util import read_file, build_dict_from_iterator
 from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
-from torch import autograd
 
 
 def init_model(opt):
@@ -156,7 +157,7 @@ def inference_one_batch(data_batch, model, criterion):
                 tag_indices_ext.contiguous().view(-1)
             )
 
-        return loss.item()
+    return loss.item()
 
 
 def train_one_batch(data_batch, model, optimizer, custom_forward,
@@ -243,6 +244,34 @@ def train_model(model, optimizer, criterion,
                                                          opt)
             print("Loss for batch {0} is: {1}".format(batch_i, loss_ml))
             train_ml_losses.append(loss_ml)
+
+            if total_batch > 1 and total_batch % opt.run_valid_every == 0:
+                valid_loss_epoch = []
+                for batch_valid in valid_data_loader:
+                    loss_valid = inference_one_batch(batch_valid,
+                                                     model, criterion)
+                    valid_loss_epoch.append(loss_valid)
+
+                loss_epoch_mean = np.mean(valid_loss_epoch)
+                valid_history_losses.append(loss_epoch_mean)
+
+                if loss_epoch_mean < best_loss:
+                    best_model = copy.deepcopy(model)
+                    best_optimizer = copy.deepcopy(optimizer)
+                    best_loss = loss_epoch_mean
+                    stop_increasing = 0
+                else:
+                    stop_increasing += 1
+
+                if total_batch > 1 and (total_batch % opt.save_model_every == 0):
+                    save_model(opt.model_path, epoch, batch_i, best_model,
+                               best_optimizer)
+
+                if stop_increasing >= opt.early_stop_tolerance:
+                    message = "Have not increased for {0} epoches, early stop training"
+                    logging.info(message.format(epoch))
+                    early_stop_flag = True
+                    break
 
             if total_batch > 1 and (total_batch % opt.save_model_every == 0):
                 save_model(opt.model_path, epoch, batch_i, best_model,
@@ -390,11 +419,11 @@ def init_argument_parser():
     parser.add_argument("--start-epoch", type=int, default=1, metavar="N",
                         help="number of start epoches")
 
-    parser.add_argument("--run-valid-every", type=int, default=5000,
+    parser.add_argument("--run-valid-every", type=int, default=10000,
                         metavar="N",
                         help="number of epochs to run validation set")
 
-    parser.add_argument("--save-model-every", type=int, default=10000,
+    parser.add_argument("--save-model-every", type=int, default=20000,
                         metavar="N",
                         help="number of epochs to run validation set")
 
@@ -402,7 +431,7 @@ def init_argument_parser():
                         metavar="N",
                         help="number of epochs to run validation set")
 
-    parser.add_argument("--min-word-freq", type=int, default=10,
+    parser.add_argument("--min-word-freq", type=int, default=30,
                         metavar="N", help="minimum word frequency")
 
     return parser.parse_args()
@@ -421,6 +450,7 @@ if __name__ == '__main__':
     word_dict = build_dict_from_iterator(file_list)
     word_index_map, index_word_map = build_word_index_mapping(
         word_dict, min_freq=opt.min_word_freq)
+    
 
     num_threads = multiprocessing.cpu_count()
     text_dataset_train = TextIndexDataset(word_index_map,
@@ -447,7 +477,8 @@ if __name__ == '__main__':
     size = 0
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
-        model = model.cuda()
+        model = model.cuda() if torch.cuda.device_count() == 1 else\
+            nn.DataParallel(model)
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
