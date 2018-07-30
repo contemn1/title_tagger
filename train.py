@@ -431,7 +431,7 @@ def init_argument_parser():
                         metavar="N",
                         help="number of epochs to run validation set")
 
-    parser.add_argument("--min-word-freq", type=int, default=30,
+    parser.add_argument("--min-word-freq", type=int, default=15,
                         metavar="N", help="minimum word frequency")
 
     return parser.parse_args()
@@ -450,8 +450,8 @@ if __name__ == '__main__':
     word_dict = build_dict_from_iterator(file_list)
     word_index_map, index_word_map = build_word_index_mapping(
         word_dict, min_freq=opt.min_word_freq)
-    
 
+    print("Number of words {0}".format(len(word_index_map)))
     num_threads = multiprocessing.cpu_count()
     text_dataset_train = TextIndexDataset(word_index_map,
                                           word_list[:training_size],
