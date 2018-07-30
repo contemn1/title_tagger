@@ -712,6 +712,7 @@ class Seq2SeqLSTMAttention(nn.Module):
             flattened_decoder_logits = torch.cat((flattened_decoder_logits_first,
                                                   flattened_decoder_logits_extend),
                                                  dim=1)
+            del padding_mask
 
         # apply log softmax to normalize, ensuring it meets the properties of probability, (batch_size * trg_len, src_len)
         flattened_decoder_logits = torch.nn.functional.log_softmax(

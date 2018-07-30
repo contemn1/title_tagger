@@ -1,0 +1,13 @@
+{
+  "instances": [
+    {
+      "instance_count": 1,
+      "resources": [
+        {"name": "cpus", "type": "SCALAR", "scalar": {"value": 8.0}},
+        {"name": "mem", "type": "SCALAR", "scalar": {"value": 16384.0}},
+        {"name": "disk", "type": "SCALAR", "scalar": {"value": 100.0}},
+        {"name": "gpus", "type": "SCALAR", "scalar": {"value": 4.0}}
+        ]
+    }],
+  "image": "docker-registry.qiyi.virtual/jarvis-image/pytorch-py27-cuda9:dev-37"
+}

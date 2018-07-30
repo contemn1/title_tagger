@@ -216,8 +216,9 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
         logging.info('clip grad (%f -> %f)' % (pre_norm, after_norm))
 
     optimizer.step()
+    del decoder_log_probs
 
-    return loss.data.item(), decoder_log_probs
+    return loss.data.item()
 
 
 def train_model(model, optimizer, criterion,
@@ -238,10 +239,10 @@ def train_model(model, optimizer, criterion,
         for batch_i, batch in enumerate(train_data_loader):
             model.train()
             total_batch += 1
-            loss_ml, decoder_log_probs = train_one_batch(batch, model,
-                                                         optimizer,
-                                                         forward_ml, criterion,
-                                                         opt)
+            loss_ml = train_one_batch(batch, model,
+                                      optimizer,
+                                      forward_ml, criterion,
+                                      opt)
             print("Loss for batch {0} is: {1}".format(batch_i, loss_ml))
             train_ml_losses.append(loss_ml)
 
@@ -263,7 +264,8 @@ def train_model(model, optimizer, criterion,
                 else:
                     stop_increasing += 1
 
-                if total_batch > 1 and (total_batch % opt.save_model_every == 0):
+                if total_batch > 1 and (
+                        total_batch % opt.save_model_every == 0):
                     save_model(opt.model_path, epoch, batch_i, best_model,
                                best_optimizer)
 
@@ -477,7 +479,7 @@ if __name__ == '__main__':
     size = 0
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
-        model = model.cuda() if torch.cuda.device_count() == 1 else\
+        model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.DataParallel(model)
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
