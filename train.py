@@ -202,7 +202,9 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     logging.info(
         "--loss calculation- {0} seconds -- ".format(time.time() - start_time))
 
-    loss *= reward
+    if loss != 1.0:
+        loss *= reward
+    
     start_time = time.time()
     loss.backward()
     logging.info("--backward- {0} seconds -- ".format(time.time() - start_time))
