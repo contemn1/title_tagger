@@ -693,24 +693,25 @@ class Seq2SeqLSTMAttention(nn.Module):
                                                                              batch_size * max_length,
                                                                              -1))
 
-        flattened_decoder_logits_first = flattened_decoder_logits[:,
-                                         :self.vocab_size]
-        flattened_decoder_logits_extend = flattened_decoder_logits[:,
-                                          self.vocab_size:]
+        if max_oov_number > 0:
+            flattened_decoder_logits_first = flattened_decoder_logits[:,
+                                             :self.vocab_size]
+            flattened_decoder_logits_extend = flattened_decoder_logits[:,
+                                              self.vocab_size:]
 
-        padding_mask = torch.zeros([batch_size * max_length, max_oov_number])
-        padding_mask = padding_mask - 1e10
+            padding_mask = torch.zeros([batch_size * max_length, max_oov_number])
+            padding_mask = padding_mask - 1e10
 
-        if torch.cuda.is_available():
-            padding_mask = padding_mask.cuda()
+            if torch.cuda.is_available():
+                padding_mask = padding_mask.cuda()
 
-        flattened_decoder_logits_extend = torch.where(
-            flattened_decoder_logits_extend == 0,
-            padding_mask,
-            flattened_decoder_logits_extend)
-        flattened_decoder_logits = torch.cat((flattened_decoder_logits_first,
-                                              flattened_decoder_logits_extend),
-                                             dim=1)
+            flattened_decoder_logits_extend = torch.where(
+                flattened_decoder_logits_extend == 0,
+                padding_mask,
+                flattened_decoder_logits_extend)
+            flattened_decoder_logits = torch.cat((flattened_decoder_logits_first,
+                                                  flattened_decoder_logits_extend),
+                                                 dim=1)
 
         # apply log softmax to normalize, ensuring it meets the properties of probability, (batch_size * trg_len, src_len)
         flattened_decoder_logits = torch.nn.functional.log_softmax(
