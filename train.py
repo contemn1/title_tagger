@@ -349,9 +349,11 @@ def init_optimizer_criterion(model, opt):
 
 def init_argument_parser():
     parser = argparse.ArgumentParser(description="PyTorch MNIST Example")
-    parser.add_argument("--training-path", type=str, metavar="N",
-                        help="type of attention general, dot or concat")
+    parser.add_argument("--training-dir", type=str, metavar="N",
+                        help="path of training directory")
 
+    parser.add_argument("--training-file", type=str, metavar="N",
+                        help="name of training file")
     parser.add_argument("--batch-size", type=int, default=64, metavar="N",
                         help="input batch size for training (default: 64)")
 
@@ -444,7 +446,7 @@ def init_argument_parser():
 
 if __name__ == '__main__':
     opt = init_argument_parser()
-    path = opt.training_path
+    path = os.path.join(opt.training_dir, opt.training_file)
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
