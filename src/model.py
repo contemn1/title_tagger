@@ -423,6 +423,7 @@ class Seq2SeqLSTMAttention(nn.Module):
             input_src)  # (self.encoder.num_layers * self.num_directions, batch_size, self.src_hidden_dim)
 
         # input (batch_size, src_len), src_emb (batch_size, src_len, emb_dim)
+        total_length = input_src.size(1)
         src_emb = self.embedding(input_src)
 
         sent_len_sorted, idx_sort = torch.sort(input_src_len,
@@ -441,7 +442,8 @@ class Seq2SeqLSTMAttention(nn.Module):
             src_emb, (self.h0_encoder, self.c0_encoder)
         )
 
-        src_h, _ = nn.utils.rnn.pad_packed_sequence(src_h, batch_first=True)
+        src_h, _ = nn.utils.rnn.pad_packed_sequence(src_h, batch_first=True,
+                                                    total_length=total_length)
 
         src_h = src_h.index_select(0, idx_unsort)
 
