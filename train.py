@@ -9,6 +9,7 @@ import time
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -438,6 +439,12 @@ def init_argument_parser():
 
     parser.add_argument("--local_rank", type=int)
 
+    parser.add_argument('--world-size', default=1, type=int,
+                        help='number of distributed processes')
+
+    parser.add_argument('--dist-backend', default='nccl', type=str,
+                        help='distributed backend')
+
     return parser.parse_args()
 
 
@@ -477,6 +484,9 @@ if __name__ == '__main__':
                               pin_memory=torch.cuda.is_available())
 
     opt.vocab_size = len(word_index_map)
+
+    dist.init_process_group(backend=opt.dist_backend,
+                            world_size=opt.world_size)
 
     size = 0
     model = Seq2SeqLSTMAttention(opt)
