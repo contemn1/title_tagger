@@ -31,10 +31,7 @@ class TextIndexDataset(Dataset):
         pad_id = self.word_to_index["PAD"]
         vocab_size = len(self.word_to_index)
         oov_words_batch = list(set([word for ele in batches for word in ele[4]]))
-        if oov_words_batch:
-            oov_words_batch = torch.LongTensor([ele for ele in range(len(oov_words_batch))])
-        else:
-            oov_words_batch = torch.LongTensor(0)
+        max_oov_number = 0 if not oov_words_batch else len(oov_words_batch)
 
         oov_dict = {value: index + vocab_size for index, value in
                     enumerate(oov_words_batch)}
@@ -62,7 +59,7 @@ class TextIndexDataset(Dataset):
         padded_tag_indices, _ = pad(tag_indices_list, pad_id)
         padded_tag_indices_ext, _ = pad(tag_indices_ext_list, pad_id)
         return padded_word_indices, padded_word_indices_ext, word_length, \
-               padded_tag_indices, padded_tag_indices_ext, oov_words_batch
+               padded_tag_indices, padded_tag_indices_ext, max_oov_number
 
 
 def pad(sequence_raw, pad_id):

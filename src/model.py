@@ -390,7 +390,7 @@ class Seq2SeqLSTMAttention(nn.Module):
         return decoder_init_hidden, decoder_init_cell
 
     def forward(self, input_src, input_src_len, input_trg, input_src_ext,
-                oov_lists, sampling="teacher_forcing"):
+                max_oov_number, sampling="teacher_forcing"):
         '''
         The differences of copy model from normal seq2seq here are:
          1. The size of decoder_logits is (batch_size, trg_seq_len, vocab_size + max_oov_number).Usually vocab_size=50000 and max_oov_number=1000. And only very few of (it's very rare to have many unk words, in most cases it's because the text is not in English)
@@ -409,8 +409,9 @@ class Seq2SeqLSTMAttention(nn.Module):
         src_h, (src_h_t, src_c_t) = self.encode(input_src, input_src_len)
         decoder_probs, decoder_hiddens, attn_weights, copy_attn_weights = \
             self.decode(
-                trg_inputs=input_trg, src_map=input_src_ext, oov_list=oov_lists,
-                enc_context=src_h, enc_hidden=(src_h_t, src_c_t),
+                trg_inputs=input_trg, src_map=input_src_ext,
+                max_oov_number=max_oov_number, enc_context=src_h,
+                enc_hidden=(src_h_t, src_c_t),
                 sampling=sampling)
         return decoder_probs, decoder_hiddens, (attn_weights, copy_attn_weights)
 
@@ -486,7 +487,7 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         return dec_input
 
-    def decode(self, trg_inputs, src_map, oov_list, enc_context, enc_hidden,
+    def decode(self, trg_inputs, src_map, max_oov_number, enc_context, enc_hidden,
                sampling="teacher_forcing"):
         '''
         :param
@@ -577,7 +578,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 # merge the generative and copying probs (batch_size, 1, vocab_size + max_oov_number)
                 decoder_log_prob = self.merge_copy_probs(decoder_logit,
                                                          copy_logit, src_map,
-                                                         oov_list)
+                                                         max_oov_number)
             else:
                 decoder_log_prob = torch.nn.functional.log_softmax(
                     decoder_logit, dim=-1).view(
@@ -635,7 +636,7 @@ class Seq2SeqLSTMAttention(nn.Module):
         # Return final outputs (logits after log_softmax), hidden states, and attention weights (for visualization)
         return decoder_log_probs, predicted_indices, attn_weights, copy_weights
 
-    def merge_copy_probs(self, decoder_logits, copy_logits, src_map, oov_list):
+    def merge_copy_probs(self, decoder_logits, copy_logits, src_map, max_oov_number):
         '''
         The function takes logits as inputs here because Gu's model applies softmax in the end, to normalize generative/copying together
         The tricky part is, Gu's model merges the logits of generative and copying part instead of probabilities,
@@ -656,7 +657,6 @@ class Seq2SeqLSTMAttention(nn.Module):
         src_len = src_map.size(1)
 
         # set max_oov_number to be the max number of oov
-        max_oov_number = oov_list.size(0)
 
         # flatten and extend size of decoder_probs from (vocab_size) to (vocab_size+max_oov_number)
         flattened_decoder_logits = decoder_logits.view(batch_size * max_length,
@@ -720,7 +720,7 @@ class Seq2SeqLSTMAttention(nn.Module):
         return decoder_log_probs
 
     def beam_search(self, input_src, input_src_len, input_trg, input_src_ext,
-                    oov_lists, beam_size=3, n_best=2):
+                    max_oov_number, beam_size=3, n_best=2):
         enc_context, (src_h_t, src_c_t) = self.encode(input_src, input_src_len)
 
         batch_size = input_trg.size(0)
@@ -783,7 +783,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 decoder_log_prob = self.merge_copy_probs(decoder_logit,
                                                          copy_logit,
                                                          input_src_ext,
-                                                         oov_lists)
+                                                         max_oov_number)
             else:
                 decoder_log_prob = torch.nn.functional.log_softmax(
                     decoder_logit, dim=-1).view(

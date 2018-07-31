@@ -64,10 +64,10 @@ def init_model(opt):
 
 
 def forward_ml(model, word_indices, word_length, tag_indices,
-               word_indices_ext, tag_indices_ext, oov_words_batch):
+               word_indices_ext, tag_indices_ext, max_oov_number):
     decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                             tag_indices, word_indices_ext,
-                                            oov_words_batch)
+                                            max_oov_number)
     return decoder_log_probs, 1.0
 
 
@@ -119,7 +119,7 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
 def prepare_data(data_batch):
     word_indices, word_indices_ext, word_length, tag_indices, \
-    tag_indices_ext, oov_words_batch = data_batch
+    tag_indices_ext, max_oov_number = data_batch
     batch_size = tag_indices.size(0)
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
@@ -131,25 +131,19 @@ def prepare_data(data_batch):
         tag_indices = tag_indices.cuda()
         tag_indices_ext = tag_indices_ext.cuda()
         word_length = word_length.cuda()
-        oov_words_batch = oov_words_batch.cuda()
 
     return word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
-           word_length, oov_words_batch
+           word_length, max_oov_number
 
 
 def inference_one_batch(data_batch, model, criterion):
-    word_indices, word_indices_ext, word_length, tag_indices, \
-    tag_indices_ext, oov_words_batch = data_batch
-
-    max_oov_number = oov_words_batch.size(0)
-
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
-    word_length, oov_words_batch = prepare_data(data_batch)
+    word_length, max_oov_number = prepare_data(data_batch)
 
     with torch.no_grad():
         decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                                 tag_indices, word_indices_ext,
-                                                oov_words_batch, "greedy")
+                                                max_oov_number, "greedy")
 
         if not opt.copy_attention:
             loss = criterion(
@@ -175,16 +169,14 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     """
 
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
-    word_length, oov_words_batch = prepare_data(data_batch)
-
-    max_oov_number = oov_words_batch.size(0)
+    word_length, max_oov_number = prepare_data(data_batch)
 
     optimizer.zero_grad()
 
     decoder_log_probs, reward = custom_forward(model, word_indices, word_length,
                                                tag_indices, word_indices_ext,
                                                tag_indices_ext,
-                                               oov_words_batch)
+                                               max_oov_number)
 
     # simply average losses of all the predicitons
     # IMPORTANT, must use logits instead of probs to compute the loss, otherwise it's super super slow at the beginning (grads of probs are small)!
@@ -488,7 +480,7 @@ if __name__ == '__main__':
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
-            nn.DataParallel(model.cuda())
+            nn.parallel.DistributedDataParallel(model.cuda())
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
