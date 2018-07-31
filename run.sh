@@ -1,4 +1,5 @@
-python3 train.py --training-path "${DATA_DIR}"  \
+pip install numpy
+python train.py --training-path "${DATA_DIR}"  \
 --training-file "filtered_sorted_result.txt" \
 --batch-size 64 \
 --rnn-size 64 \
