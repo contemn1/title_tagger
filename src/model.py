@@ -296,7 +296,7 @@ class Seq2SeqLSTMAttention(nn.Module):
             hidden_size=self.trg_hidden_dim,
             num_layers=self.nlayers_trg,
             bidirectional=False,
-            batch_first=False,
+            batch_first=True,
             dropout=self.dropout
         )
 
@@ -466,15 +466,11 @@ class Seq2SeqLSTMAttention(nn.Module):
         :param copy_h_tilde: (batch_size, 1, trg_hidden)
         :return:
         '''
-        trg_emb = trg_emb.permute(1, 0, 2)  # (1, batch_size, embed_dim)
         inputs = trg_emb
         if self.input_feeding:
-            h_tilde = h_tilde.permute(1, 0, 2)  # (1, batch_size, trg_hidden)
             inputs = torch.cat((inputs, h_tilde),
-                               2)  # (1, batch_size, inputs_dim+trg_hidden)
+                               2)  # (batch_size, 1, inputs_dim+trg_hidden)
         if self.copy_input_feeding:
-            copy_h_tilde = copy_h_tilde.permute(1, 0,
-                                                2)  # (1, batch_size, inputs_dim+trg_hidden)
             inputs = torch.cat((inputs, copy_h_tilde), 2)
 
         if self.dec_input_bridge:
@@ -559,7 +555,7 @@ class Seq2SeqLSTMAttention(nn.Module):
             '''
             # Get the h_tilde (hidden after attention) and attention weights. h_tilde (batch_size,1,trg_hidden), attn_weight & attn_logit(batch_size,1,src_len)
             h_tilde, attn_weight, attn_logit = self.attention_layer(
-                decoder_output.permute(1, 0, 2), enc_context)
+                decoder_output, enc_context)
 
             # compute the output decode_logit and read-out as probs: p_x = Softmax(W_s * h_tilde)
             # h_tilde=(batch_size, 1, trg_hidden_size) -> decoder2vocab(h_tilde.view)=(batch_size * 1, vocab_size) -> decoder_logit=(batch_size, 1, vocab_size)
