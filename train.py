@@ -488,7 +488,7 @@ if __name__ == '__main__':
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
-            nn.DataParallel(model.cuda(), device_ids=[1, 2])
+            nn.DataParallel(model.cuda())
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
