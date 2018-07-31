@@ -438,6 +438,7 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         # src_h (batch_size, seq_len, hidden_size * num_directions): outputs (h_t) of all the time steps
         # src_h_t, src_c_t (num_layers * num_directions, batch, hidden_size): hidden and cell state at last time step
+        self.encoder.flatten_parameters()
         src_h, (src_h_t, src_c_t) = self.encoder(
             src_emb, (self.h0_encoder, self.c0_encoder)
         )
@@ -542,6 +543,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                                             trg_hidden_dim)).cuda() if torch.cuda.is_available() else Variable(
             torch.zeros(batch_size, 1, trg_hidden_dim))
 
+        self.decoder.flatten_parameters()
         for di in range(max_length):
             # initialize target embedding and reshape the targets to be time step first
             trg_emb = self.embedding(trg_input)  # (batch_size, 1, embed_dim)
