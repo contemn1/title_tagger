@@ -6,4 +6,4 @@ python train.py --training-dir "${DATA_DIR}"  \
 --word-vec-size 64 \
 --model-path "${OUTPUT_DIR}" \
 --num-epoches 1000 \
---run-valid-every 10 --save-model-every 20000 \
+--run-valid-every 20000 --save-model-every 40000
