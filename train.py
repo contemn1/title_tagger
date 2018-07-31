@@ -436,6 +436,8 @@ def init_argument_parser():
     parser.add_argument("--min-word-freq", type=int, default=15,
                         metavar="N", help="minimum word frequency")
 
+    parser.add_argument("--local_rank", type=int)
+
     return parser.parse_args()
 
 
@@ -479,6 +481,7 @@ if __name__ == '__main__':
     size = 0
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
+        torch.cuda.set_device(opt.local_rank)
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DistributedDataParallel(model.cuda())
 

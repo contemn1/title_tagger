@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as func
 from torch.autograd import Variable
-from torch.distributions import categorical
 
 from src.beam_search import Beam
 
@@ -607,7 +606,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                 trg_input = top_idx.cuda() if torch.cuda.is_available() else top_idx
 
             else:
-                categorical_distribution = categorical.Categorical(
+                categorical_distribution = torch.distributions.categorical.Categorical(
                     logits=decoder_log_prob.data)
                 top_idx = categorical_distribution.sample()
                 predicted_indices.append(top_idx)
