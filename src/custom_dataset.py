@@ -52,6 +52,7 @@ class TextIndexDataset(Dataset):
             tag_indices_ext_list.append(tag_indices_ext)
 
         padded_word_indices, word_length = pad(word_indices_list, pad_id)
+        word_length = torch.from_numpy(np.array(word_length, dtype=np.int64))
         padded_word_indices_ext, _ = pad(word_indices_ext_list, pad_id)
         padded_tag_indices, _ = pad(tag_indices_list, pad_id)
         padded_tag_indices_ext, _ = pad(tag_indices_ext_list, pad_id)

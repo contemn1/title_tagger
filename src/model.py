@@ -424,23 +424,16 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         # input (batch_size, src_len), src_emb (batch_size, src_len, emb_dim)
         src_emb = self.embedding(input_src)
-        input_src_len = np.array(input_src_len)
-        sent_len_sorted, idx_sort = np.sort(input_src_len)[::-1], np.argsort(
-            -input_src_len)
-        idx_unsort = np.argsort(idx_sort)
 
-        idx_sort = torch.from_numpy(
-            idx_sort).cuda() if torch.cuda.is_available() \
-            else torch.from_numpy(idx_sort)
+        sent_len_sorted, idx_sort = torch.sort(input_src_len,
+                                               descending=True)
+
+        _, idx_unsort = torch.sort(idx_sort)
 
         src_emb = src_emb.index_select(0, Variable(idx_sort))
 
         src_emb = nn.utils.rnn.pack_padded_sequence(src_emb, sent_len_sorted,
                                                     batch_first=True)
-
-        idx_unsort = torch.from_numpy(
-            idx_unsort).cuda() if torch.cuda.is_available() \
-            else torch.from_numpy(idx_unsort)
 
         # src_h (batch_size, seq_len, hidden_size * num_directions): outputs (h_t) of all the time steps
         # src_h_t, src_c_t (num_layers * num_directions, batch, hidden_size): hidden and cell state at last time step
@@ -450,7 +443,7 @@ class Seq2SeqLSTMAttention(nn.Module):
 
         src_h, _ = nn.utils.rnn.pad_packed_sequence(src_h, batch_first=True)
 
-        src_h = src_h.index_select(0, Variable(idx_unsort))
+        src_h = src_h.index_select(0, idx_unsort)
 
         # concatenate to (batch_size, hidden_size * num_directions)
         if self.bidirectional:
@@ -556,7 +549,6 @@ class Seq2SeqLSTMAttention(nn.Module):
 
             # run RNN decoder with inputs (trg_len first)
             decoder_output, dec_hidden = self.decoder(dec_input, dec_hidden)
-
 
             '''
             (2) Standard Attention
@@ -699,7 +691,8 @@ class Seq2SeqLSTMAttention(nn.Module):
             flattened_decoder_logits_extend = flattened_decoder_logits[:,
                                               self.vocab_size:]
 
-            padding_mask = torch.zeros([batch_size * max_length, max_oov_number])
+            padding_mask = torch.zeros(
+                [batch_size * max_length, max_oov_number])
             padding_mask = padding_mask - 1e10
 
             if torch.cuda.is_available():
@@ -709,9 +702,10 @@ class Seq2SeqLSTMAttention(nn.Module):
                 flattened_decoder_logits_extend == 0,
                 padding_mask,
                 flattened_decoder_logits_extend)
-            flattened_decoder_logits = torch.cat((flattened_decoder_logits_first,
-                                                  flattened_decoder_logits_extend),
-                                                 dim=1)
+            flattened_decoder_logits = torch.cat(
+                (flattened_decoder_logits_first,
+                 flattened_decoder_logits_extend),
+                dim=1)
             del padding_mask
 
         # apply log softmax to normalize, ensuring it meets the properties of probability, (batch_size * trg_len, src_len)

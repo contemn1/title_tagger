@@ -118,7 +118,7 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
 
 def prepare_data(word_indices, word_indices_ext,
-                 tag_indices, tag_indices_ext):
+                 tag_indices, tag_indices_ext, word_length):
     batch_size = tag_indices.size(0)
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
@@ -129,7 +129,9 @@ def prepare_data(word_indices, word_indices_ext,
         word_indices_ext = word_indices_ext.cuda()
         tag_indices = tag_indices.cuda()
         tag_indices_ext = tag_indices_ext.cuda()
-    return word_indices, word_indices_ext, tag_indices, tag_indices_ext
+        word_length = word_length.cuda()
+
+    return word_indices, word_indices_ext, tag_indices, tag_indices_ext, word_length
 
 
 def inference_one_batch(data_batch, model, criterion):
@@ -138,8 +140,9 @@ def inference_one_batch(data_batch, model, criterion):
 
     max_oov_number = len(oov_words_batch)
 
-    word_indices, word_indices_ext, tag_indices, tag_indices_ext = prepare_data(
-        word_indices, word_indices_ext, tag_indices, tag_indices_ext)
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext, word_length = \
+        prepare_data(word_indices, word_indices_ext, tag_indices,
+                     tag_indices_ext, word_length)
     with torch.no_grad():
         decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                                 tag_indices, word_indices_ext,
@@ -171,8 +174,9 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     word_indices, word_indices_ext, word_length, tag_indices, \
     tag_indices_ext, oov_words_batch = data_batch
 
-    word_indices, word_indices_ext, tag_indices, tag_indices_ext = prepare_data(
-        word_indices, word_indices_ext, tag_indices, tag_indices_ext)
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext, word_length = \
+        prepare_data(word_indices, word_indices_ext,
+                     tag_indices, tag_indices_ext, word_length)
 
     max_oov_number = len(oov_words_batch)
 
