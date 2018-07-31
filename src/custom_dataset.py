@@ -31,6 +31,8 @@ class TextIndexDataset(Dataset):
         pad_id = self.word_to_index["PAD"]
         vocab_size = len(self.word_to_index)
         oov_words_batch = list(set([word for ele in batches for word in ele[4]]))
+        oov_words_batch = torch.LongTensor([ele for ele in range(len(oov_words_batch))])
+
         oov_dict = {value: index + vocab_size for index, value in
                     enumerate(oov_words_batch)}
 

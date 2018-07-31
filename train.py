@@ -117,8 +117,9 @@ def forward_rl(model, word_indices, word_length, tag_indices,
     return sampling_log_probs, sampling_reward - baseline_reward
 
 
-def prepare_data(word_indices, word_indices_ext,
-                 tag_indices, tag_indices_ext, word_length):
+def prepare_data(data_batch):
+    word_indices, word_indices_ext, word_length, tag_indices, \
+    tag_indices_ext, oov_words_batch = data_batch
     batch_size = tag_indices.size(0)
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
@@ -130,19 +131,21 @@ def prepare_data(word_indices, word_indices_ext,
         tag_indices = tag_indices.cuda()
         tag_indices_ext = tag_indices_ext.cuda()
         word_length = word_length.cuda()
+        oov_words_batch = oov_words_batch.cuda()
 
-    return word_indices, word_indices_ext, tag_indices, tag_indices_ext, word_length
+    return word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
+           word_length, oov_words_batch
 
 
 def inference_one_batch(data_batch, model, criterion):
     word_indices, word_indices_ext, word_length, tag_indices, \
     tag_indices_ext, oov_words_batch = data_batch
 
-    max_oov_number = len(oov_words_batch)
+    max_oov_number = oov_words_batch.size(0)
 
-    word_indices, word_indices_ext, tag_indices, tag_indices_ext, word_length = \
-        prepare_data(word_indices, word_indices_ext, tag_indices,
-                     tag_indices_ext, word_length)
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
+    word_length, oov_words_batch = prepare_data(data_batch)
+
     with torch.no_grad():
         decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                                 tag_indices, word_indices_ext,
@@ -171,14 +174,10 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
     :type optimizer: Adam
     """
 
-    word_indices, word_indices_ext, word_length, tag_indices, \
-    tag_indices_ext, oov_words_batch = data_batch
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
+    word_length, oov_words_batch = prepare_data(data_batch)
 
-    word_indices, word_indices_ext, tag_indices, tag_indices_ext, word_length = \
-        prepare_data(word_indices, word_indices_ext,
-                     tag_indices, tag_indices_ext, word_length)
-
-    max_oov_number = len(oov_words_batch)
+    max_oov_number = oov_words_batch.size(0)
 
     optimizer.zero_grad()
 

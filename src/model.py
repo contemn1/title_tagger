@@ -656,7 +656,7 @@ class Seq2SeqLSTMAttention(nn.Module):
         src_len = src_map.size(1)
 
         # set max_oov_number to be the max number of oov
-        max_oov_number = len(oov_list)
+        max_oov_number = oov_list.size(0)
 
         # flatten and extend size of decoder_probs from (vocab_size) to (vocab_size+max_oov_number)
         flattened_decoder_logits = decoder_logits.view(batch_size * max_length,
