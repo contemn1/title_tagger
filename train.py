@@ -10,6 +10,7 @@ import time
 import numpy as np
 import subprocess
 import torch
+import torch.distributed as dist
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -216,9 +217,6 @@ def train_model(model, optimizer, criterion,
                                       optimizer,
                                       forward_ml, criterion,
                                       opt)
-            if torch.cuda.is_available() and batch_i % 50 == 0:
-                gpu_mem = get_gpu_memory_map()
-                print("GPU: {:.2f} MB".format(gpu_mem[0] / 1000.0))
 
             train_ml_losses.append(loss_ml)
 
@@ -418,12 +416,22 @@ def init_argument_parser():
     parser.add_argument("--min-word-freq", type=int, default=15,
                         metavar="N", help="minimum word frequency")
 
+    parser.add_argument('--dist-backend', default='nccl', type=str,
+                        help='distributed backend')
+
+    parser.add_argument("--local_rank", type=int)
+
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     opt = init_argument_parser()
     path = os.path.join(opt.training_dir, opt.training_file)
+    torch.cuda.set_device(opt.local_rank)
+
+    dist.init_process_group(backend=opt.dist_backend,
+                            init_method="env://")
+
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
@@ -437,6 +445,7 @@ if __name__ == '__main__':
 
     print("Number of words {0}".format(len(word_index_map)))
     num_threads = multiprocessing.cpu_count()
+    num_threads = min(num_threads, 4)
     text_dataset_train = TextIndexDataset(word_index_map,
                                           word_list[:training_size],
                                           tag_list[:training_size])
@@ -458,11 +467,13 @@ if __name__ == '__main__':
 
     opt.vocab_size = len(word_index_map)
 
-    size = 0
+
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
-            nn.parallel.DataParallel(model.cuda(), device_ids=[0, 1])
+            nn.parallel.DistributedDataParallel(model.cuda(),
+                                                device_ids=[opt.local_rank],
+                                                output_device=opt.local_rank)
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
