@@ -437,14 +437,6 @@ def init_argument_parser():
     parser.add_argument("--min-word-freq", type=int, default=15,
                         metavar="N", help="minimum word frequency")
 
-    parser.add_argument("--local_rank", type=int)
-
-    parser.add_argument('--world-size', default=1, type=int,
-                        help='number of distributed processes')
-
-    parser.add_argument('--dist-backend', default='nccl', type=str,
-                        help='distributed backend')
-
     return parser.parse_args()
 
 
@@ -485,15 +477,12 @@ if __name__ == '__main__':
 
     opt.vocab_size = len(word_index_map)
 
-    dist.init_process_group(backend=opt.dist_backend,
-                            world_size=opt.world_size)
-
     size = 0
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
         torch.cuda.set_device(opt.local_rank)
         model = model.cuda() if torch.cuda.device_count() == 1 else \
-            nn.parallel.DistributedDataParallel(model.cuda())
+            nn.parallel.DataParallel(model.cuda())
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
