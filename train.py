@@ -216,7 +216,7 @@ def train_model(model, optimizer, criterion,
                                       optimizer,
                                       forward_ml, criterion,
                                       opt)
-            if batch_i % 50 == 0:
+            if torch.cuda.is_available() and batch_i % 50 == 0:
                 gpu_mem = get_gpu_memory_map()
                 print("GPU: {:.2f} MB".format(gpu_mem[0] / 1000.0))
 
