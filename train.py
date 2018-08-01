@@ -120,7 +120,6 @@ def inference_one_batch(data_batch, model, criterion):
         decoder_log_probs, _, _ = model.forward(word_indices, word_length,
                                                 tag_indices, word_indices_ext,
                                                 max_oov_number, "greedy")
-
         if not opt.copy_attention:
             loss = criterion(
                 decoder_log_probs.contiguous().view(-1, opt.vocab_size),
@@ -132,8 +131,10 @@ def inference_one_batch(data_batch, model, criterion):
                                                     opt.vocab_size + max_oov_number),
                 tag_indices_ext.contiguous().view(-1)
             )
+        loss_item = loss.item()
+        del loss
 
-    return loss.item()
+    return loss_item
 
 
 def train_one_batch(data_batch, model, optimizer, custom_forward,
@@ -218,16 +219,25 @@ def train_model(model, optimizer, criterion,
                                       forward_ml, criterion,
                                       opt)
 
+            if total_batch % opt.print_loss_every == 0:
+                print("Training loss in batch {0} is {1:.2f}".format(
+                    total_batch, loss_ml
+                ))
+
             train_ml_losses.append(loss_ml)
 
             if total_batch > 1 and total_batch % opt.run_valid_every == 0:
                 valid_loss_epoch = []
+                model.eval()
                 for batch_valid in valid_data_loader:
                     loss_valid = inference_one_batch(batch_valid,
                                                      model, criterion)
                     valid_loss_epoch.append(loss_valid)
 
                 loss_epoch_mean = np.mean(valid_loss_epoch)
+                print("Loss on valid set for batch {0} is {1:.2f}".format(
+                    total_batch, loss_epoch_mean
+                ))
                 valid_history_losses.append(loss_epoch_mean)
 
                 if loss_epoch_mean < best_loss:
@@ -416,8 +426,10 @@ def init_argument_parser():
     parser.add_argument("--min-word-freq", type=int, default=15,
                         metavar="N", help="minimum word frequency")
 
-    parser.add_argument('--dist-backend', default='nccl', type=str,
-                        help='distributed backend')
+    parser.add_argument("--dist-backend", default="nccl", type=str,
+                        help="distributed backend")
+
+    parser.add_argument("--print-loss-every", type=int, default=50)
 
     return parser.parse_args()
 
