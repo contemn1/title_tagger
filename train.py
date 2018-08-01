@@ -8,8 +8,8 @@ import os
 import time
 
 import numpy as np
+import subprocess
 import torch
-import torch.distributed as dist
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -20,48 +20,22 @@ from src.data_util import read_file, build_dict_from_iterator
 from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
 
 
-def init_model(opt):
-    logging.info(
-        '======================  Model Parameters  =========================')
+def get_gpu_memory_map():
+    """Get the current gpu usage.
 
-    if opt.copy_attention:
-        logging.info('Train a Seq2Seq model with Copy Mechanism')
-    else:
-        logging.info('Train a normal Seq2Seq model')
-
-    model = Seq2SeqLSTMAttention(opt)
-
-    if opt.train_from:
-        logging.info("loading previous checkpoint from %s" % opt.train_from)
-        # load the saved the meta-model and override the current one
-        model = torch.load(
-            open(os.path.join(opt.model_path, opt.exp, '.initial.model'), 'wb')
-        )
-
-        if torch.cuda.is_available():
-            checkpoint = torch.load(open(opt.train_from, 'rb'))
-        else:
-            checkpoint = torch.load(
-                open(opt.train_from, 'rb'),
-                map_location=lambda storage, loc: storage
-            )
-        # some compatible problems, keys are started with 'module.'
-        checkpoint = dict(
-            [(k[7:], v) if k.startswith('module.') else (k, v) for k, v in
-             checkpoint.items()])
-        model.load_state_dict(checkpoint)
-    else:
-        # dump the meta-model
-        torch.save(
-            model.state_dict(),
-            open(os.path.join(opt.train_from[: opt.train_from.find('.epoch=')],
-                              'initial.model'), 'wb')
-        )
-
-    if torch.cuda.is_available():
-        model = model.cuda()
-
-    return model
+    Returns
+    -------
+    usage: dict
+        Keys are device ids as integers.
+        Values are memory usage as integers in MB.
+    """
+    result = subprocess.check_output(
+        ['nvidia-smi', '--query-gpu=memory.used',
+         '--format=csv,nounits,noheader'], encoding='utf-8')
+    # Convert lines into a dictionary
+    gpu_memory = [int(x) for x in result.strip().split('\n')]
+    gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
+    return gpu_memory_map
 
 
 def forward_ml(model, word_indices, word_length, tag_indices,
@@ -242,6 +216,9 @@ def train_model(model, optimizer, criterion,
                                       optimizer,
                                       forward_ml, criterion,
                                       opt)
+            if batch_i % 50 == 0:
+                gpu_mem = get_gpu_memory_map()
+                print("GPU: {:.2f} MB".format(gpu_mem[0] / 1000.0))
 
             train_ml_losses.append(loss_ml)
 
