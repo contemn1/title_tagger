@@ -1,5 +1,4 @@
-pip install numpy
-CUDA_VISIBLE_DEVICES=0,1 python3 train.py --training-dir "${DATA_DIR}"  \
+python train.py --training-dir "${DATA_DIR}"  \
 --training-file "filtered_sorted_result.txt" \
 --batch-size 64 \
 --rnn-size 64 \
