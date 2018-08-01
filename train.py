@@ -419,15 +419,13 @@ def init_argument_parser():
     parser.add_argument('--dist-backend', default='nccl', type=str,
                         help='distributed backend')
 
-    parser.add_argument("--local_rank", type=int)
-
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     opt = init_argument_parser()
     path = os.path.join(opt.training_dir, opt.training_file)
-    
+
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
