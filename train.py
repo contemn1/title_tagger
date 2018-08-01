@@ -242,7 +242,7 @@ def train_model(model, optimizer, criterion,
                                       optimizer,
                                       forward_ml, criterion,
                                       opt)
-            print("Loss for batch {0} is: {1}".format(batch_i, loss_ml))
+
             train_ml_losses.append(loss_ml)
 
             if total_batch > 1 and total_batch % opt.run_valid_every == 0:
@@ -277,6 +277,10 @@ def train_model(model, optimizer, criterion,
             if total_batch > 1 and (total_batch % opt.save_model_every == 0):
                 save_model(opt.model_path, epoch, batch_i, best_model,
                            best_optimizer)
+
+        average_epoch_loss = np.mean(train_ml_losses)
+        logging.log("Loss for epoch {0} is: {1}".format(epoch,
+                                                        average_epoch_loss))
 
 
 def save_model(model_directory, epoch, batch, model, optimizer):
