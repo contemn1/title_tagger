@@ -427,11 +427,7 @@ def init_argument_parser():
 if __name__ == '__main__':
     opt = init_argument_parser()
     path = os.path.join(opt.training_dir, opt.training_file)
-    torch.cuda.set_device(opt.local_rank)
-
-    dist.init_process_group(backend=opt.dist_backend,
-                            init_method="env://")
-
+    
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
@@ -467,13 +463,10 @@ if __name__ == '__main__':
 
     opt.vocab_size = len(word_index_map)
 
-
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
-            nn.parallel.DistributedDataParallel(model.cuda(),
-                                                device_ids=[opt.local_rank],
-                                                output_device=opt.local_rank)
+            nn.parallel.DataParallel(model.cuda())
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
 
