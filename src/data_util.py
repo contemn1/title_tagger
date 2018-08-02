@@ -63,15 +63,29 @@ def build_word_index_mapping(word_dict, min_freq):
 
 def word_to_id(word_list, word_to_index):
     word_indices = []
-    oov_words = []
+    oov_dict = {}
+    initial = len(word_to_index)
     for word in word_list:
         if word in word_to_index:
             word_indices.append(word_to_index[word])
         else:
-            word_indices.append(word_to_index["OOV"])
-            oov_words.append(word)
-    return word_indices, oov_words
+            oov_index = initial + len(oov_dict)
+            word_indices.append(oov_index)
+            oov_dict[word] = oov_index
 
+    return word_indices, oov_dict
+
+
+def tag_to_id(tag_list, word_to_index, oov_dict):
+    tag_indices = []
+    for tag in tag_list:
+        if tag in word_to_index:
+            tag_indices.append(word_to_index[tag])
+        elif tag in oov_dict:
+            tag_indices.append(oov_dict[tag])
+        else:
+            tag_indices.append(word_to_index["OOV"])
+    return tag_indices
 
 def restore_word_index_mapping(file_path):
     word_index_iter = read_file(file_path, lambda x: x.strip().split("\t"))

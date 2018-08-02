@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from src.data_util import word_to_id
+from src.data_util import word_to_id, tag_to_id
 
 
 class TextIndexDataset(Dataset):
@@ -19,45 +19,44 @@ class TextIndexDataset(Dataset):
     def __getitem__(self, index):
         current_sentence = self.data_x[index]
         current_tags = self.data_y[index]
-        word_indices, oov_words = word_to_id(current_sentence,
-                                             self.word_to_index)
-        tag_indices, _ = word_to_id(current_tags, self.word_to_index)
-        return current_sentence, current_tags, word_indices, tag_indices, oov_words
+        word_indices, oov_dict = word_to_id(current_sentence,
+                                            self.word_to_index)
+        tag_indices = tag_to_id(current_tags, self.word_to_index, oov_dict)
+        return current_sentence, current_tags, word_indices, tag_indices
 
     def collate_fn_one2one(self, batches):
         '''
         Puts each data field into a tensor with outer dimension batch size"
         '''
         pad_id = self.word_to_index["PAD"]
-        vocab_size = len(self.word_to_index)
-        oov_words_batch = list(set([word for ele in batches for word in ele[4]]))
-        max_oov_number = 0 if not oov_words_batch else len(oov_words_batch)
-
-        oov_dict = {value: index + vocab_size for index, value in
-                    enumerate(oov_words_batch)}
+        oov_id = self.word_to_index["OOV"]
+        max_vocab_id = len(self.word_to_index) - 1
 
         word_indices_ext_list = []
         tag_indices_ext_list = []
-        word_indices_list = []
-        tag_indices_list = []
-        for current_sentence, current_tags, word_indices, tag_indices, _ in batches:
-            word_indices_list.append(word_indices)
-            tag_indices_list.append(tag_indices)
-            word_indices_ext = [value if key not in oov_dict else oov_dict[key]
-                                for key, value in
-                                zip(current_sentence, word_indices)]
-            tag_indices_ext = [value if key not in oov_dict else oov_dict[key]
-                               for key, value in
-                               zip(current_tags, tag_indices)]
+        for current_sentence, current_tags, word_indices, tag_indices in batches:
+            word_indices_ext_list.append(word_indices)
+            tag_indices_ext_list.append(tag_indices)
 
-            word_indices_ext_list.append(word_indices_ext)
-            tag_indices_ext_list.append(tag_indices_ext)
+        padded_word_indices_ext, word_length = pad(word_indices_ext_list,
+                                                   pad_id)
+        word_mask_tensor = torch.zeros_like(padded_word_indices_ext) + oov_id
+        padded_word_indices = torch.where(
+            padded_word_indices_ext > max_vocab_id,
+            word_mask_tensor,
+            padded_word_indices_ext)
 
-        padded_word_indices, word_length = pad(word_indices_list, pad_id)
+        max_oov_number = torch.sum(padded_word_indices == oov_id,
+                                   dim=1).max().item()
+
         word_length = torch.from_numpy(np.array(word_length, dtype=np.int64))
-        padded_word_indices_ext, _ = pad(word_indices_ext_list, pad_id)
-        padded_tag_indices, _ = pad(tag_indices_list, pad_id)
         padded_tag_indices_ext, _ = pad(tag_indices_ext_list, pad_id)
+        tag_mask_tensor = torch.zeros_like(padded_tag_indices_ext) + oov_id
+
+        padded_tag_indices = torch.where(padded_tag_indices_ext > max_vocab_id,
+                                         tag_mask_tensor,
+                                         padded_tag_indices_ext)
+
         return padded_word_indices, padded_word_indices_ext, word_length, \
                padded_tag_indices, padded_tag_indices_ext, max_oov_number
 
