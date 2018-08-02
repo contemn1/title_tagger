@@ -456,11 +456,12 @@ def read_training_data(opt):
     return word_list, tag_list, word_index_map, index_word_map
 
 
-def load_pretrained_model(model_path, model, optimizer):
+def load_pretrained_model(model_path, model, optimizer, opt):
     if os.path.exists(model_path):
         check_point = torch.load(model_path, lambda storage, location: storage)
         model.load_state_dict(check_point["model_state_dict"])
         optimizer.load_state_dict(check_point["optimizer_state_dict"])
+        opt.start_epoch = check_point["epoch"] + 1
 
 
 def main():
