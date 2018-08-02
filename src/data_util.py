@@ -51,9 +51,13 @@ def build_word_index_mapping(word_dict, min_freq):
     word_to_idx = {"PAD": 0, "SOS": 1, "EOS": 2, "OOV": 3}
     index_to_word = ["PAD", "SOS", "EOS", "OOV"]
     for key, value in word_dict.items():
+        if not key or not key.strip():
+            continue
+
         if value >= min_freq and key not in word_to_idx:
             word_to_idx[key] = len(word_to_idx)
             index_to_word.append(key)
+
     return word_to_idx, index_to_word
 
 
@@ -67,3 +71,13 @@ def word_to_id(word_list, word_to_index):
             word_indices.append(word_to_index["OOV"])
             oov_words.append(word)
     return word_indices, oov_words
+
+
+def restore_word_index_mapping(file_path):
+    word_index_iter = read_file(file_path, lambda x: x.strip().split("\t"))
+    word_index_iter = (ele for ele in word_index_iter if ele and len(ele) == 2)
+    word_to_index_iter = ((key, int(value)) for key, value in word_index_iter)
+    word_to_index = dict(word_to_index_iter)
+    index_to_word = sorted(word_to_index.items(), key=lambda x: x[1])
+    index_to_word = [key for key, value in index_to_word]
+    return word_to_index, index_to_word

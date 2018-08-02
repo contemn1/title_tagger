@@ -16,8 +16,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 
 from src.custom_dataset import TextIndexDataset
-from src.data_util import build_word_index_mapping
-from src.data_util import read_file, build_dict_from_iterator
+from src.data_util import build_word_index_mapping, restore_word_index_mapping
+from src.data_util import read_file, build_dict_from_iterator, output_iterator
 from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
 
 
@@ -112,7 +112,7 @@ def prepare_data(data_batch):
            word_length, max_oov_number
 
 
-def inference_one_batch(data_batch, model, criterion):
+def inference_one_batch(data_batch, model, criterion, opt):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length, max_oov_number = prepare_data(data_batch)
 
@@ -231,7 +231,7 @@ def train_model(model, optimizer, criterion,
                 model.eval()
                 for batch_valid in valid_data_loader:
                     loss_valid = inference_one_batch(batch_valid,
-                                                     model, criterion)
+                                                     model, criterion, opt)
                     valid_loss_epoch.append(loss_valid)
 
                 loss_epoch_mean = np.mean(valid_loss_epoch)
@@ -248,14 +248,9 @@ def train_model(model, optimizer, criterion,
                 else:
                     stop_increasing += 1
 
-                if total_batch > 1 and (
-                        total_batch % opt.save_model_every == 0):
-                    save_model(opt.model_path, epoch, batch_i, best_model,
-                               best_optimizer)
-
                 if stop_increasing >= opt.early_stop_tolerance:
                     message = "Have not increased for {0} epoches, early stop training"
-                    logging.info(message.format(epoch))
+                    print(message.format(epoch))
                     early_stop_flag = True
                     break
 
@@ -264,13 +259,12 @@ def train_model(model, optimizer, criterion,
                            best_optimizer)
 
         average_epoch_loss = np.mean(train_ml_losses)
-        logging.log("Loss for epoch {0} is: {1}".format(epoch,
-                                                        average_epoch_loss))
+        print("Loss for epoch {0} is: {1}".format(epoch, average_epoch_loss))
 
 
 def save_model(model_directory, epoch, batch, model, optimizer):
-    model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}".format(epoch,
-                                                                     batch)
+    model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}.pt".format(epoch,
+                                                                        batch)
     model_path = os.path.join(model_directory, model_name)
     logging.info("save model to {0}".format(model_path))
     state = {
@@ -431,27 +425,55 @@ def init_argument_parser():
 
     parser.add_argument("--print-loss-every", type=int, default=50)
 
+    parser.add_argument("--restore-model", type=bool, default=False)
+
+    parser.add_argument("--model-name", type=str, help="name of saved model")
+
+    parser.add_argument("--word-index-map-name", type=str, help="name of word "
+                                                                "index map")
+
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    opt = init_argument_parser()
+def read_training_data(opt):
     path = os.path.join(opt.training_dir, opt.training_file)
-
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
                  len(ele) == 2]
-    training_size = int(len(file_list) * 0.8)
     tag_list = [tags for tags, _ in file_list]
     word_list = [words for _, words in file_list]
-    word_dict = build_dict_from_iterator(file_list)
-    word_index_map, index_word_map = build_word_index_mapping(
-        word_dict, min_freq=opt.min_word_freq)
+    if not opt.restore_model:
+        word_dict = build_dict_from_iterator(file_list)
+        word_index_map, index_word_map = build_word_index_mapping(
+            word_dict, min_freq=opt.min_word_freq)
+    else:
+        map_path = os.path.join(opt.training_dir,
+                                opt.word_index_map_name)
 
-    print("Number of words {0}".format(len(word_index_map)))
+        word_index_map, index_word_map = restore_word_index_mapping(map_path)
+
+    return word_list, tag_list, word_index_map, index_word_map
+
+
+def load_pretrained_model(model_path, model, optimizer):
+    if os.path.exists(model_path):
+        check_point = torch.load(model_path, lambda storage, location: storage)
+        model.load_state_dict(check_point["model_state_dict"])
+        optimizer.load_state_dict(check_point["optimizer_state_dict"])
+
+
+def main():
+    opt = init_argument_parser()
     num_threads = multiprocessing.cpu_count()
     num_threads = min(num_threads, 4)
+
+    word_list, tag_list, word_index_map, index_word_map = read_training_data(
+        opt)
+
+    training_size = int(len(word_list) * 0.8)
+
+    print("Number of words {0}".format(len(word_index_map)))
     text_dataset_train = TextIndexDataset(word_index_map,
                                           word_list[:training_size],
                                           tag_list[:training_size])
@@ -474,11 +496,19 @@ if __name__ == '__main__':
     opt.vocab_size = len(word_index_map)
 
     model = Seq2SeqLSTMAttention(opt)
+
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
+    if opt.restore_model:
+        model_path = os.path.join(opt.model_path, opt.model_name)
+        load_pretrained_model(model_path, model, optimizer_ml)
 
     train_model(model, optimizer_ml, criterion, train_loader,
                 valid_loader, opt)
+
+
+if __name__ == '__main__':
+    main()
