@@ -87,6 +87,7 @@ def tag_to_id(tag_list, word_to_index, oov_dict):
             tag_indices.append(word_to_index["OOV"])
     return tag_indices
 
+
 def restore_word_index_mapping(file_path):
     word_index_iter = read_file(file_path, lambda x: x.strip().split("\t"))
     word_index_iter = (ele for ele in word_index_iter if ele and len(ele) == 2)
