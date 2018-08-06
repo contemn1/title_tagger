@@ -523,6 +523,10 @@ if __name__ == '__main__':
         opt)
     opt.vocab_size = len(word_index_map)
     model = Seq2SeqLSTMAttention(opt)
+    if torch.cuda.is_available():
+        model = model.cuda() if torch.cuda.device_count() == 1 else \
+            nn.parallel.DataParallel(model.cuda())
+
     print(model.copy_attention_layer.attn.weight.data[:3])
     model.load_state_dict(check_point["model_state_dict"])
     print(model.copy_attention_layer.attn.weight.data[:3])
