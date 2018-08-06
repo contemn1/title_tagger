@@ -519,14 +519,15 @@ if __name__ == '__main__':
     model_path = os.path.join(opt.model_path, opt.model_name)
     check_point = torch.load(model_path, lambda storage, location: storage)
     print(check_point["model_state_dict"]["module.copy_attention_layer.attn.weight"][:3])
-    word_list, tag_list, word_index_map, index_word_map = read_training_data(
-        opt)
+    map_path = os.path.join(opt.training_dir, opt.word_index_map_name)
+
+    word_index_map, index_word_map = restore_word_index_mapping(map_path)
     opt.vocab_size = len(word_index_map)
     model = Seq2SeqLSTMAttention(opt)
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
 
-    print(model.copy_attention_layer.attn.weight.data[:3])
+    print(model.module.copy_attention_layer.attn.weight.data[:3])
     model.load_state_dict(check_point["model_state_dict"])
-    print(model.copy_attention_layer.attn.weight.data[:3])
+    print(model.module.copy_attention_layer.attn.weight.data[:3])
