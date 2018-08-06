@@ -95,7 +95,7 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
 def prepare_data(data_batch):
     word_indices, word_indices_ext, word_length, tag_indices, \
-    tag_indices_ext, max_oov_number = data_batch
+    tag_indices_ext, max_oov_number, _, _ = data_batch
     batch_size = tag_indices.size(0)
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
@@ -512,4 +512,52 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    opt = init_argument_parser()
+    num_threads = multiprocessing.cpu_count()
+    num_threads = min(num_threads, 4)
+
+    word_list, tag_list, word_index_map, index_word_map = read_training_data(
+        opt)
+
+    training_size = int(len(word_list) * 0.8)
+
+    print("Number of words {0}".format(len(word_index_map)))
+    text_dataset_train = TextIndexDataset(word_index_map,
+                                          word_list[:training_size],
+                                          tag_list[:training_size])
+    text_dataset_valid = TextIndexDataset(word_index_map,
+                                          word_list[training_size:],
+                                          tag_list[training_size:])
+
+    train_loader = DataLoader(text_dataset_train, batch_size=opt.batch_size,
+                              shuffle=True,
+                              collate_fn=text_dataset_train.collate_fn_one2one,
+                              num_workers=num_threads,
+                              pin_memory=torch.cuda.is_available())
+
+    valid_loader = DataLoader(text_dataset_valid, batch_size=opt.batch_size,
+                              shuffle=True,
+                              collate_fn=text_dataset_valid.collate_fn_one2one,
+                              num_workers=num_threads,
+                              pin_memory=torch.cuda.is_available())
+
+    opt.vocab_size = len(word_index_map)
+
+    model = Seq2SeqLSTMAttention(opt)
+
+    if torch.cuda.is_available():
+        model = model.cuda() if torch.cuda.device_count() == 1 else \
+            nn.parallel.DataParallel(model.cuda())
+
+    optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
+    if opt.restore_model:
+        model_path = os.path.join(opt.model_path, opt.model_name)
+        load_pretrained_model(model_path, model, optimizer_ml)
+
+    for train_batch in train_loader:
+        with torch.no_grad():
+            loss = train_one_batch(train_batch, model, optimizer_ml,
+                                   custom_forward=forward_ml,
+                                   criterion=criterion,
+                                   opt=opt)
+            print(loss)

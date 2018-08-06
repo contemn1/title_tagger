@@ -34,9 +34,12 @@ class TextIndexDataset(Dataset):
 
         word_indices_ext_list = []
         tag_indices_ext_list = []
+        tags_per_batch = []
+        words_per_batch = []
         for current_sentence, current_tags, word_indices, tag_indices in batches:
             word_indices_ext_list.append(word_indices)
             tag_indices_ext_list.append(tag_indices)
+            tags_per_batch.append(current_tags)
 
         padded_word_indices_ext, word_length = pad(word_indices_ext_list,
                                                    pad_id)
@@ -58,7 +61,7 @@ class TextIndexDataset(Dataset):
                                          padded_tag_indices_ext)
 
         return padded_word_indices, padded_word_indices_ext, word_length, \
-               padded_tag_indices, padded_tag_indices_ext, max_oov_number
+               padded_tag_indices, padded_tag_indices_ext, max_oov_number, tags_per_batch, words_per_batch
 
 
 def pad(sequence_raw, pad_id):
