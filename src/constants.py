@@ -1,0 +1,9 @@
+PAD = 0
+BOS = 1
+EOS = 2
+UNK = 3
+
+PAD_WORD = "PAD"
+BOS_WORD = "BOS"
+EOS_WORD = "EOS"
+UNK_WORD = "UNK"
