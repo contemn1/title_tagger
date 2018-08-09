@@ -120,7 +120,7 @@ def inference_one_batch(data_batch, model, criterion, sampler):
 
 def train_one_batch(data_batch, model, optimizer,
                     custom_forward, criterion, opt):
-    vocab_size = model.vocab_size_decoder
+    vocab_size = opt.vocab_size_decoder
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
     oov_per_batch = torch.sum(word_indices_ext >= vocab_size, dim=1).max().item()
@@ -375,6 +375,8 @@ def main():
                               pin_memory=torch.cuda.is_available())
 
     vocab_size, vocab_size_decoder = len(word_index_map), len(tag_index_map)
+    opt.vocab_size = vocab_size
+    opt.vocab_size_decoder = vocab_size_decoder
     model = Seq2SeqLSTMAttention(opt, vocab_size, vocab_size_decoder)
 
     if torch.cuda.is_available():
