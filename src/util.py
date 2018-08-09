@@ -14,7 +14,7 @@ def merge_copy_generation(copy_probs, gen_probs, src_seq, n_vocab):
 
     expanded_src_seq = expand_dim(src_seq)
     expanded_gen_probs = gen_probs.contiguous().view(batch_size * max_length, -1)
-    oov_each_line = torch.sum(src_seq >= n_vocab, dim=1).data.numpy()
+    oov_each_line = torch.sum(src_seq >= n_vocab, dim=1).cpu().numpy()
     max_oov_number = int(np.max(oov_each_line))
     flat_copy_prbs = copy_probs.view(batch_size * max_length, -1)
     if max_oov_number > 0:
