@@ -95,7 +95,7 @@ def prepare_data(data_batch):
             tag_indices_ext, word_length)
 
 
-def inference_one_batch(data_batch, model, criterion, opt):
+def inference_one_batch(data_batch, model, criterion, sampler):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
     batch_size, seq_length = tag_indices_ext.size()
@@ -104,7 +104,7 @@ def inference_one_batch(data_batch, model, criterion, opt):
                                                              word_length,
                                                              tag_indices,
                                                              word_indices_ext,
-                                                             teacher_forcing_sampler)
+                                                             sampler)
         loss = criterion(
             decoder_log_probs.contiguous().view(batch_size * seq_length, -1),
             tag_indices_ext.contiguous().view(-1)
@@ -194,7 +194,7 @@ def train_model(model, optimizer, criterion,
                 model.eval()
                 for batch_valid in valid_data_loader:
                     loss_valid, predicted_indices = inference_one_batch(
-                        batch_valid, model, criterion, opt)
+                        batch_valid, model, criterion, teacher_forcing_sampler)
 
                     valid_loss_epoch.append(loss_valid)
 
@@ -343,7 +343,10 @@ def main():
 
     training_size = int(len(word_list) * 0.8)
 
-    print("Number of words {0}".format(len(word_index_map)))
+    print("Number of words {0}, tags {1} and shared_words {2}".format(
+        len(word_index_map),
+        len(tag_index_map),
+        num_shared_words))
     text_dataset_train = TextIndexDataset(word_list[:training_size],
                                           tag_list[:training_size],
                                           word_index_map,
@@ -366,10 +369,8 @@ def main():
                               num_workers=num_threads,
                               pin_memory=torch.cuda.is_available())
 
-    opt.vocab_size = len(word_index_map)
-    opt.vocab_size_decoder = len(tag_index_map)
-
-    model = Seq2SeqLSTMAttention(opt)
+    vocab_size, vocab_size_decoder = len(word_index_map), len(tag_index_map)
+    model = Seq2SeqLSTMAttention(opt, vocab_size, vocab_size_decoder)
 
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \

@@ -282,7 +282,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                                    attention_mode=opt.attention_mode,
                                    input_feeding=opt.input_feeding)
         if shared_words > 0:
-            self.encoder.embedding.weight[:shared_words, :] = self.decoder.embedding.weight[:shared_words, :]
+            self.encoder.embedding.weight[:shared_words] = self.decoder.embedding.weight[:shared_words]
 
     def forward(self, input_src, input_src_len,
                 input_trg, input_src_ext, sampler):
