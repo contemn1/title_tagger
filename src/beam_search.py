@@ -1,10 +1,5 @@
 import torch
-
-PAD_WORD = 0
-BOS = 1
-EOS = 2
-UNK = 3
-
+from src.constants import PAD, BOS, EOS, UNK
 
 class Beam(object):
     """Ordered beam of candidate outputs."""
@@ -14,7 +9,7 @@ class Beam(object):
         """Initialize params."""
         self.size = size
         self.eos_top = False
-        self.pad = PAD_WORD
+        self.pad = PAD
         self.bos = BOS
         self.eos = EOS
         self.tt = torch.cuda if cuda else torch
