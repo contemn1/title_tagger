@@ -22,15 +22,17 @@ from src.sampling import teacher_forcing_sampler, greedy_sampler, random_sampler
 
 
 def forward_ml(model, word_indices, word_length, tag_indices,
-               word_indices_ext, max_oov_number,tag_indices_ext):
+               word_indices_ext, max_oov_number, tag_indices_ext):
     """
     :type model: Seq2SeqLSTMAttention
     """
-    decoder_log_probs, _ = model.forward(word_indices, word_length,
-                                         tag_indices, word_indices_ext,
-                                         max_oov_number,
-                                         sampler=teacher_forcing_sampler)
-    return decoder_log_probs, 1.0
+    decoder_log_probs, predicted_indices = model.forward(word_indices,
+                                                         word_length,
+                                                         tag_indices,
+                                                         word_indices_ext,
+                                                         max_oov_number,
+                                                         sampler=teacher_forcing_sampler)
+    return decoder_log_probs, 1.0, predicted_indices
 
 
 def calculate_reward(predicted_indices, target_indices):
@@ -77,7 +79,7 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
     baseline_reward = calculate_reward(sampling_indices, tag_indices_ext)
     sampling_reward = calculate_reward(greedy_indices, tag_indices_ext)
-    return sampling_log_probs, sampling_reward - baseline_reward
+    return sampling_log_probs, sampling_reward - baseline_reward, sampling_indices
 
 
 def prepare_data(data_batch):
@@ -102,7 +104,8 @@ def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
     batch_size, seq_length = tag_indices_ext.size()
-    oov_per_batch = torch.sum(word_indices_ext >= vocab_size, dim=1).max().item()
+    oov_per_batch = torch.sum(word_indices_ext >= vocab_size,
+                              dim=1).max().item()
     with torch.no_grad():
         decoder_log_probs, predicted_indices = model.forward(word_indices,
                                                              word_length,
@@ -125,14 +128,20 @@ def train_one_batch(data_batch, model, optimizer,
     vocab_size = opt.vocab_size_decoder
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
-    oov_per_batch = torch.sum(word_indices_ext >= vocab_size, dim=1).max().item()
+    oov_per_batch = torch.sum(word_indices_ext >= vocab_size,
+                              dim=1).max().item()
     batch_size, seq_length = tag_indices_ext.size()
     optimizer.zero_grad()
 
-    decoder_log_probs, reward = custom_forward(model, word_indices, word_length,
-                                               tag_indices, word_indices_ext,
-                                               oov_per_batch,
-                                               tag_indices_ext)
+    decoder_log_probs, reward, pred_indices = custom_forward(model,
+                                                             word_indices,
+                                                             word_length,
+                                                             tag_indices,
+                                                             word_indices_ext,
+                                                             oov_per_batch,
+                                                             tag_indices_ext)
+    print(tag_indices_ext)
+    print(pred_indices)
 
     # simply average losses of all the predicitons
     # IMPORTANT, must use logits instead of probs to compute the loss, otherwise it's super super slow at the beginning (grads of probs are small)!
@@ -351,7 +360,7 @@ def main():
 
     training_size = int(len(word_list) * 0.8)
 
-    print("Number of words {0}, tags {1} and shared_words {2}".format(
+    print("Number of words {0}, tags {1} an d shared_words {2}".format(
         len(word_index_map),
         len(tag_index_map),
         num_shared_words))
