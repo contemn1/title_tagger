@@ -262,7 +262,7 @@ class CopyDecoder(nn.Module):
 class Seq2SeqLSTMAttention(nn.Module):
     """Container module with an encoder, deocder, embeddings."""
 
-    def __init__(self, opt, vocab_size, vocab_size_decoder, shared_words=0):
+    def __init__(self, opt, vocab_size, vocab_size_decoder):
         """Initialize model."""
         super(Seq2SeqLSTMAttention, self).__init__()
         self.encoder = Encoder(vocab_size=vocab_size,
@@ -281,8 +281,6 @@ class Seq2SeqLSTMAttention(nn.Module):
                                    dropout=opt.dropout,
                                    attention_mode=opt.attention_mode,
                                    input_feeding=opt.input_feeding)
-        if shared_words > 0:
-            self.encoder.embedding.weight[:shared_words] = self.decoder.embedding.weight[:shared_words]
 
     def forward(self, input_src, input_src_len,
                 input_trg, input_src_ext, sampler):
