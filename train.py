@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import argparse
 import copy
 import logging
 import multiprocessing
@@ -8,42 +7,28 @@ import os
 import time
 
 import numpy as np
-import subprocess
 import torch
-import torch.distributed as dist
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
+from src.argument_parser import init_argument_parser
+from src.constants import EOS, PAD, BOS
 from src.custom_dataset import TextIndexDataset
-from src.data_util import build_word_index_mapping, restore_word_index_mapping
-from src.data_util import read_file, build_dict_from_iterator, output_iterator
-from src.model import Seq2SeqLSTMAttention, EOS, PAD_WORD, BOS
-
-
-def get_gpu_memory_map():
-    """Get the current gpu usage.
-
-    Returns
-    -------
-    usage: dict
-        Keys are device ids as integers.
-        Values are memory usage as integers in MB.
-    """
-    result = subprocess.check_output(
-        ['nvidia-smi', '--query-gpu=memory.used',
-         '--format=csv,nounits,noheader'], encoding='utf-8')
-    # Convert lines into a dictionary
-    gpu_memory = [int(x) for x in result.strip().split('\n')]
-    gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
-    return gpu_memory_map
+from src.data_util import restore_word_index_mapping, build_mapping_from_dict
+from src.data_util import read_file, build_dict_from_iterator
+from src.model import Seq2SeqLSTMAttention
+from src.sampling import teacher_forcing_sampler, greedy_sampler, random_sampler
 
 
 def forward_ml(model, word_indices, word_length, tag_indices,
-               word_indices_ext, tag_indices_ext, max_oov_number):
-    decoder_log_probs, _, _ = model.forward(word_indices, word_length,
-                                            tag_indices, word_indices_ext,
-                                            max_oov_number)
+               word_indices_ext, tag_indices_ext):
+    """
+    :type model: Seq2SeqLSTMAttention
+    """
+    decoder_log_probs, _ = model.forward(word_indices, word_length,
+                                         tag_indices, word_indices_ext,
+                                         sampler=teacher_forcing_sampler)
     return decoder_log_probs, 1.0
 
 
@@ -58,8 +43,8 @@ def calculate_reward(predicted_indices, target_indices):
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
     predicted_mask = np.array(predicted_mask)
-    true_positive = (predicted_indices == target_indices).data.numpy() \
-                    * target_mask * predicted_mask
+    true_positive = (predicted_indices == target_indices).data.numpy()
+    true_positive = true_positive * target_mask * predicted_mask
 
     true_positive = np.sum(true_positive, axis=1)
     target_seq_length = np.sum(target_mask, axis=1)
@@ -73,20 +58,19 @@ def calculate_reward(predicted_indices, target_indices):
 
 
 def forward_rl(model, word_indices, word_length, tag_indices,
-               word_indices_ext, tag_indices_ext, oov_words_batch):
-    sampling_log_probs, sampling_indices, _ = model.forward(word_indices,
-                                                            word_length,
-                                                            tag_indices,
-                                                            word_indices_ext,
-                                                            oov_words_batch,
-                                                            "categorical")
+               word_indices_ext, tag_indices_ext):
+    sampling_log_probs, sampling_indices = model.forward(word_indices,
+                                                         word_length,
+                                                         tag_indices,
+                                                         word_indices_ext,
+                                                         random_sampler)
 
-    greedy_log_probs, greedy_indices, _ = model.forward(word_indices,
-                                                        word_length,
-                                                        tag_indices,
-                                                        word_indices_ext,
-                                                        oov_words_batch,
-                                                        "greedy")
+    with torch.no_grad():
+        greedy_log_probs, greedy_indices = model.forward(word_indices,
+                                                         word_length,
+                                                         tag_indices,
+                                                         word_indices_ext,
+                                                         greedy_sampler)
 
     baseline_reward = calculate_reward(sampling_indices, tag_indices_ext)
     sampling_reward = calculate_reward(greedy_indices, tag_indices_ext)
@@ -94,8 +78,7 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
 
 def prepare_data(data_batch):
-    word_indices, word_indices_ext, word_length, tag_indices, \
-    tag_indices_ext, max_oov_number, _, _ = data_batch
+    word_indices, word_indices_ext, word_length, tag_indices, tag_indices_ext, *_ = data_batch
     batch_size = tag_indices.size(0)
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
@@ -108,68 +91,48 @@ def prepare_data(data_batch):
         tag_indices_ext = tag_indices_ext.cuda()
         word_length = word_length.cuda()
 
-    return word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
-           word_length, max_oov_number
+    return (word_indices, word_indices_ext, tag_indices,
+            tag_indices_ext, word_length)
 
 
 def inference_one_batch(data_batch, model, criterion, opt):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
-    word_length, max_oov_number = prepare_data(data_batch)
-
+    word_length = prepare_data(data_batch)
+    batch_size, seq_length = tag_indices_ext.size()
     with torch.no_grad():
-        decoder_log_probs, _, _ = model.forward(word_indices, word_length,
-                                                tag_indices, word_indices_ext,
-                                                max_oov_number, "greedy")
-        if not opt.copy_attention:
-            loss = criterion(
-                decoder_log_probs.contiguous().view(-1, opt.vocab_size),
-                tag_indices.contiguous().view(-1)
-            )
-        else:
-            loss = criterion(
-                decoder_log_probs.contiguous().view(-1,
-                                                    opt.vocab_size + max_oov_number),
-                tag_indices_ext.contiguous().view(-1)
-            )
+        decoder_log_probs, predicted_indices = model.forward(word_indices,
+                                                             word_length,
+                                                             tag_indices,
+                                                             word_indices_ext,
+                                                             teacher_forcing_sampler)
+        loss = criterion(
+            decoder_log_probs.contiguous().view(batch_size * seq_length, -1),
+            tag_indices_ext.contiguous().view(-1)
+        )
         loss_item = loss.item()
         del loss
 
-    return loss_item
+    return loss_item, predicted_indices
 
 
-def train_one_batch(data_batch, model, optimizer, custom_forward,
-                    criterion, opt):
-    """
-    :type data_batch: tuple
-    :type model: Seq2SeqLSTMAttention
-    :type optimizer: Adam
-    """
-
+def train_one_batch(data_batch, model, optimizer,
+                    custom_forward, criterion, opt):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
-    word_length, max_oov_number = prepare_data(data_batch)
+    word_length = prepare_data(data_batch)
 
+    batch_size, seq_length = tag_indices_ext.size()
     optimizer.zero_grad()
 
     decoder_log_probs, reward = custom_forward(model, word_indices, word_length,
                                                tag_indices, word_indices_ext,
-                                               tag_indices_ext,
-                                               max_oov_number)
+                                               tag_indices_ext)
 
     # simply average losses of all the predicitons
     # IMPORTANT, must use logits instead of probs to compute the loss, otherwise it's super super slow at the beginning (grads of probs are small)!
     start_time = time.time()
-
-    if not opt.copy_attention:
-        loss = criterion(
-            decoder_log_probs.contiguous().view(-1, opt.vocab_size),
-            tag_indices.contiguous().view(-1)
-        )
-    else:
-        loss = criterion(
-            decoder_log_probs.contiguous().view(-1,
-                                                opt.vocab_size + max_oov_number),
-            tag_indices_ext.contiguous().view(-1)
-        )
+    loss = criterion(
+        decoder_log_probs.contiguous().view(batch_size * seq_length, -1),
+        tag_indices_ext.contiguous().view(-1))
 
     logging.info(
         "--loss calculation- {0} seconds -- ".format(time.time() - start_time))
@@ -199,7 +162,7 @@ def train_one_batch(data_batch, model, optimizer, custom_forward,
 def train_model(model, optimizer, criterion,
                 train_data_loader, valid_data_loader, opt):
     valid_history_losses = []
-    best_loss = 1000000.0  # for f-score
+    best_loss = 100000.0  # for f-score
     stop_increasing = 0
     best_model = model
     best_optimizer = optimizer
@@ -230,8 +193,9 @@ def train_model(model, optimizer, criterion,
                 valid_loss_epoch = []
                 model.eval()
                 for batch_valid in valid_data_loader:
-                    loss_valid = inference_one_batch(batch_valid,
-                                                     model, criterion, opt)
+                    loss_valid, predicted_indices = inference_one_batch(
+                        batch_valid, model, criterion, opt)
+
                     valid_loss_epoch.append(loss_valid)
 
                 loss_epoch_mean = np.mean(valid_loss_epoch)
@@ -304,7 +268,7 @@ def init_optimizer_criterion(model, opt):
     :return:
     """
 
-    criterion = torch.nn.NLLLoss(ignore_index=PAD_WORD)
+    criterion = torch.nn.NLLLoss(ignore_index=PAD)
 
     if opt.train_ml:
         optimizer_ml = Adam(
@@ -326,134 +290,18 @@ def init_optimizer_criterion(model, opt):
     return optimizer_ml, optimizer_rl, criterion
 
 
-def init_argument_parser():
-    parser = argparse.ArgumentParser(description="PyTorch MNIST Example")
-    parser.add_argument("--training-dir", type=str, metavar="N",
-                        help="path of training directory")
-
-    parser.add_argument("--training-file", type=str, metavar="N",
-                        help="name of training file")
-    parser.add_argument("--batch-size", type=int, default=64, metavar="N",
-                        help="input batch size for training (default: 64)")
-
-    parser.add_argument("--word-vec-size", type=int, default=300, metavar="N",
-                        help="dimension of word embedding")
-
-    parser.add_argument("--enc-layers", type=int, default=1, metavar="N",
-                        help="number of layers of encoder RNNs")
-
-    parser.add_argument("--dec-layers", type=int, default=1, metavar="N",
-                        help="number of layers of decoder RNNs")
-
-    parser.add_argument("--dropout", type=float, default=0.5, metavar="N",
-                        help="dropout rate")
-
-    parser.add_argument("--model-path", type=str, metavar="N",
-                        help="path to save model")
-
-    parser.add_argument("--rnn-size", type=int, default=300, metavar="N",
-                        help="hidden size of RNN cell")
-
-    parser.add_argument("--bidirectional", type=bool, default=True, metavar="N",
-                        help="whether to use bidirectional RNN")
-
-    parser.add_argument("--attention-mode", type=str, metavar="N",
-                        default="general",
-                        help="type of attention general, dot or concat")
-
-    parser.add_argument("--copy-attention", type=bool, metavar="N",
-                        default=True, help="type of attention")
-
-    parser.add_argument("--input-feeding", type=bool, default=False,
-                        metavar="N",
-                        help="whether to use input feeding")
-
-    parser.add_argument("--copy-input-feeding", type=bool, default=True,
-                        metavar="N",
-                        help="whether to use copy input feeding")
-
-    parser.add_argument("--copy-mode", type=str, default="general",
-                        metavar="N",
-                        help="same as attention mode")
-
-    parser.add_argument("--reuse-copy-attn", type=bool, default=True,
-                        metavar="N",
-                        help="whether to use intra decoder attention as copy attention")
-
-    parser.add_argument("--train-ml", type=bool, default=True,
-                        metavar="N",
-                        help="whether to use maximum log likelihood in loss function")
-
-    parser.add_argument("--train-rl", type=bool, default=True,
-                        metavar="N",
-                        help="whether to use self crictic in loss function")
-
-    parser.add_argument("--learning-rate", type=float, default=0.001,
-                        metavar="N",
-                        help="learning rate for maximum likelihood")
-
-    parser.add_argument("--learning-rate-rl", type=float, default=0.001,
-                        metavar="N",
-                        help="learning rate for reinforcement learning")
-
-    parser.add_argument("--max-grad-norm", type=float, default=4.0, metavar="N",
-                        help="dropout rate")
-
-    parser.add_argument("--num-epoches", type=int, default=100, metavar="N",
-                        help="number of epoches")
-
-    parser.add_argument("--start-epoch", type=int, default=1, metavar="N",
-                        help="number of start epoches")
-
-    parser.add_argument("--run-valid-every", type=int, default=10000,
-                        metavar="N",
-                        help="number of epochs to run validation set")
-
-    parser.add_argument("--save-model-every", type=int, default=20000,
-                        metavar="N",
-                        help="number of epochs to run validation set")
-
-    parser.add_argument("--early-stop-tolerance", type=int, default=20,
-                        metavar="N",
-                        help="number of epochs to run validation set")
-
-    parser.add_argument("--min-word-freq", type=int, default=15,
-                        metavar="N", help="minimum word frequency")
-
-    parser.add_argument("--dist-backend", default="nccl", type=str,
-                        help="distributed backend")
-
-    parser.add_argument("--print-loss-every", type=int, default=50)
-
-    parser.add_argument("--restore-model", type=bool, default=False)
-
-    parser.add_argument("--model-name", type=str, help="name of saved model")
-
-    parser.add_argument("--word-index-map-name", type=str, help="name of word "
-                                                                "index map")
-
-    return parser.parse_args()
-
-
 def read_training_data(opt):
+    def remove_empty(input_list):
+        return [ele for ele in input_list if ele and ele.strip()]
+
     path = os.path.join(opt.training_dir, opt.training_file)
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
                  file_iter if
                  len(ele) == 2]
-    tag_list = [tags for tags, _ in file_list]
-    word_list = [words for _, words in file_list]
-    if not opt.restore_model:
-        word_dict = build_dict_from_iterator(file_list)
-        word_index_map, index_word_map = build_word_index_mapping(
-            word_dict, min_freq=opt.min_word_freq)
-    else:
-        map_path = os.path.join(opt.training_dir,
-                                opt.word_index_map_name)
-
-        word_index_map, index_word_map = restore_word_index_mapping(map_path)
-
-    return word_list, tag_list, word_index_map, index_word_map
+    tag_list = [remove_empty(tags) for tags, _ in file_list]
+    word_list = [remove_empty(words) for _, words in file_list]
+    return word_list, tag_list
 
 
 def load_pretrained_model(model_path, model, optimizer, opt):
@@ -464,23 +312,47 @@ def load_pretrained_model(model_path, model, optimizer, opt):
         opt.start_epoch = check_point["epoch"] + 1
 
 
+def construct_mapping(word_list, tag_list, opt):
+    word_freq = build_dict_from_iterator(word_list, opt.min_word_freq)
+    tag_freq = build_dict_from_iterator(tag_list, opt.min_tag_freq)
+    return build_mapping_from_dict(word_freq, tag_freq)
+
+
+def restore_mapping(opt):
+    word_path = os.path.join(opt.model_path, opt.word_index_map_name)
+    word_index_map, index_word_map = restore_word_index_mapping(word_path)
+    tag_path = os.path.join(opt.model_path, opt.tag_index_map_name)
+    tag_index_map, index_tag_map = restore_word_index_mapping(tag_path)
+    num_shared = 0
+    for tag in tag_index_map:
+        num_shared += 1 if tag in word_index_map else 0
+    return word_index_map, tag_index_map, index_word_map, index_tag_map, num_shared
+
+
 def main():
     opt = init_argument_parser()
     num_threads = multiprocessing.cpu_count()
     num_threads = min(num_threads, 4)
 
-    word_list, tag_list, word_index_map, index_word_map = read_training_data(
-        opt)
+    word_list, tag_list = read_training_data(opt)
+    mappings = restore_mapping(opt) if opt.restore_model \
+        else construct_mapping(word_list, tag_list, opt)
+
+    (word_index_map, tag_index_map, index_word_map,
+     index_tag_map, num_shared_words) = mappings
 
     training_size = int(len(word_list) * 0.8)
 
     print("Number of words {0}".format(len(word_index_map)))
-    text_dataset_train = TextIndexDataset(word_index_map,
-                                          word_list[:training_size],
-                                          tag_list[:training_size])
-    text_dataset_valid = TextIndexDataset(word_index_map,
-                                          word_list[training_size:],
-                                          tag_list[training_size:])
+    text_dataset_train = TextIndexDataset(word_list[:training_size],
+                                          tag_list[:training_size],
+                                          word_index_map,
+                                          tag_index_map)
+
+    text_dataset_valid = TextIndexDataset(word_list[training_size:],
+                                          tag_list[training_size:],
+                                          word_index_map,
+                                          tag_index_map)
 
     train_loader = DataLoader(text_dataset_train, batch_size=opt.batch_size,
                               shuffle=True,
@@ -495,6 +367,7 @@ def main():
                               pin_memory=torch.cuda.is_available())
 
     opt.vocab_size = len(word_index_map)
+    opt.vocab_size_decoder = len(tag_index_map)
 
     model = Seq2SeqLSTMAttention(opt)
 
@@ -512,22 +385,4 @@ def main():
 
 
 if __name__ == '__main__':
-    opt = init_argument_parser()
-    num_threads = multiprocessing.cpu_count()
-    num_threads = min(num_threads, 4)
-
-    model_path = os.path.join(opt.model_path, opt.model_name)
-    check_point = torch.load(model_path, lambda storage, location: storage)
-    print(check_point["model_state_dict"]["module.copy_attention_layer.attn.weight"][:3])
-    map_path = os.path.join(opt.training_dir, opt.word_index_map_name)
-
-    word_index_map, index_word_map = restore_word_index_mapping(map_path)
-    opt.vocab_size = len(word_index_map)
-    model = Seq2SeqLSTMAttention(opt)
-    if torch.cuda.is_available():
-        model = model.cuda() if torch.cuda.device_count() == 1 else \
-            nn.parallel.DataParallel(model.cuda())
-
-    print(model.module.copy_attention_layer.attn.weight.data[:3])
-    model.load_state_dict(check_point["model_state_dict"])
-    print(model.module.copy_attention_layer.attn.weight.data[:3])
+    main()
