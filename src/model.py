@@ -183,7 +183,7 @@ class CopyDecoder(nn.Module):
         return self.dec_input_bridge(decoder_input)
 
     def forward(self, dec_inputs, enc_input_ext,
-                enc_output, enc_hidden, sampler):
+                enc_output, enc_hidden, max_oov_number, sampler):
         """
          The differences of copy model from normal seq2seq here are:
          1. The size of decoder_logits is (batch_size, trg_seq_len, vocab_size + max_oov_number).
@@ -195,6 +195,7 @@ class CopyDecoder(nn.Module):
         :param enc_output: encoder outputs (batch_size, seq_length, 2*rnn_size)
         :param enc_hidden: hidden and cell state of encoder's last time step
         (1, batch_size, sequence_length)
+        :param max_oov_number: number of out of vocabulary(using tags dict) in sentence
         :param sampler: sampler function to predict index of current tags and
         decide input of next time step
         :return: log prob distributions of decoder, index of prediction
@@ -244,7 +245,8 @@ class CopyDecoder(nn.Module):
             final_distribution = merge_copy_generation(copy_prob_dist,
                                                        generation_prob_dist,
                                                        enc_input_ext,
-                                                       self.vocab_size)
+                                                       self.vocab_size,
+                                                       max_oov_number)
 
             final_distribution = self.softmax(final_distribution)
             predicted_index, trg_input = sampler(final_distribution, dec_inputs,
@@ -265,6 +267,8 @@ class Seq2SeqLSTMAttention(nn.Module):
     def __init__(self, opt, vocab_size, vocab_size_decoder):
         """Initialize model."""
         super(Seq2SeqLSTMAttention, self).__init__()
+        self.vocab_size = vocab_size
+        self.vocab_size_decoder = vocab_size_decoder
         self.encoder = Encoder(vocab_size=vocab_size,
                                embedding_size=opt.word_vec_size,
                                hidden_size=opt.rnn_size,
@@ -283,10 +287,10 @@ class Seq2SeqLSTMAttention(nn.Module):
                                    input_feeding=opt.input_feeding)
 
     def forward(self, input_src, input_src_len,
-                input_trg, input_src_ext, sampler):
+                input_trg, input_src_ext, max_oov_number, sampler):
         enc_output, enc_hidden = self.encoder.forward(input_src, input_src_len)
         decoder_log_probs, predicted_indices_batch = self.decoder.forward(
-            input_trg, input_src_ext, enc_output, enc_hidden,
+            input_trg, input_src_ext, enc_output, enc_hidden, max_oov_number,
             sampler
         )
         return decoder_log_probs, predicted_indices_batch

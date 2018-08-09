@@ -22,12 +22,13 @@ from src.sampling import teacher_forcing_sampler, greedy_sampler, random_sampler
 
 
 def forward_ml(model, word_indices, word_length, tag_indices,
-               word_indices_ext, tag_indices_ext):
+               word_indices_ext, max_oov_number,tag_indices_ext):
     """
     :type model: Seq2SeqLSTMAttention
     """
     decoder_log_probs, _ = model.forward(word_indices, word_length,
                                          tag_indices, word_indices_ext,
+                                         max_oov_number,
                                          sampler=teacher_forcing_sampler)
     return decoder_log_probs, 1.0
 
@@ -58,11 +59,12 @@ def calculate_reward(predicted_indices, target_indices):
 
 
 def forward_rl(model, word_indices, word_length, tag_indices,
-               word_indices_ext, tag_indices_ext):
+               word_indices_ext, max_oov_number, tag_indices_ext):
     sampling_log_probs, sampling_indices = model.forward(word_indices,
                                                          word_length,
                                                          tag_indices,
                                                          word_indices_ext,
+                                                         max_oov_number,
                                                          random_sampler)
 
     with torch.no_grad():
@@ -70,6 +72,7 @@ def forward_rl(model, word_indices, word_length, tag_indices,
                                                          word_length,
                                                          tag_indices,
                                                          word_indices_ext,
+                                                         max_oov_number,
                                                          greedy_sampler)
 
     baseline_reward = calculate_reward(sampling_indices, tag_indices_ext)
@@ -117,14 +120,16 @@ def inference_one_batch(data_batch, model, criterion, sampler):
 
 def train_one_batch(data_batch, model, optimizer,
                     custom_forward, criterion, opt):
+    vocab_size = model.vocab_size_decoder
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
-
+    oov_per_batch = torch.sum(word_indices_ext >= vocab_size, dim=1).max().item()
     batch_size, seq_length = tag_indices_ext.size()
     optimizer.zero_grad()
 
     decoder_log_probs, reward = custom_forward(model, word_indices, word_length,
                                                tag_indices, word_indices_ext,
+                                               oov_per_batch,
                                                tag_indices_ext)
 
     # simply average losses of all the predicitons
