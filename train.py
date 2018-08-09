@@ -98,15 +98,17 @@ def prepare_data(data_batch):
             tag_indices_ext, word_length)
 
 
-def inference_one_batch(data_batch, model, criterion, sampler):
+def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
     batch_size, seq_length = tag_indices_ext.size()
+    oov_per_batch = torch.sum(word_indices_ext >= vocab_size, dim=1).max().item()
     with torch.no_grad():
         decoder_log_probs, predicted_indices = model.forward(word_indices,
                                                              word_length,
                                                              tag_indices,
                                                              word_indices_ext,
+                                                             oov_per_batch,
                                                              sampler)
         loss = criterion(
             decoder_log_probs.contiguous().view(batch_size * seq_length, -1),
@@ -199,7 +201,8 @@ def train_model(model, optimizer, criterion,
                 model.eval()
                 for batch_valid in valid_data_loader:
                     loss_valid, predicted_indices = inference_one_batch(
-                        batch_valid, model, criterion, teacher_forcing_sampler)
+                        batch_valid, model, criterion,
+                        teacher_forcing_sampler, opt.vocab_size_decoder)
 
                     valid_loss_epoch.append(loss_valid)
 
