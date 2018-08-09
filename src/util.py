@@ -33,4 +33,5 @@ def create_padding_mask(oov_each_line, max_oov_number):
                                        np.full(max_oov_number - oov,
                                                float('-inf'))))
         padding_mask.append(padding_line)
-    return torch.from_numpy(np.array(padding_mask, dtype=np.float32))
+    mask_tensor = torch.from_numpy(np.array(padding_mask, dtype=np.float32))
+    return mask_tensor.cuda() if torch.cuda.is_available() else mask_tensor
