@@ -76,9 +76,11 @@ class Attention(nn.Module):
             energies = torch.cat(energies, dim=0).permute(1, 0,
                                                           2)  # (trg_len, batch_size, src_len) -> (batch_size, trg_len, src_len)
 
+
         return energies.contiguous()
 
-    def forward(self, hidden, encoder_outputs, previous_attn=None):
+    def forward(self, hidden, encoder_outputs,
+                previous_attn=None):
         """
         Compute the attention and h_tilde, inputs/outputs must be batch first
         :param hidden: (batch_size, trg_len, trg_hidden_dim)

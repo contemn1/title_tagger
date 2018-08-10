@@ -5,14 +5,12 @@ import torch
 
 def teacher_forcing_sampler(final_distribution, trg_inputs, step,
                             **unused_args):
-    _, candidate_index = final_distribution.topk(2, dim=-1)
-    top_idx = candidate_index[:, :, 0]
-    top_idx = torch.where(top_idx == UNK, candidate_index[:, :, 1], top_idx)
+    _, top_idx = final_distribution.topk(1, dim=-1)
 
     max_step = trg_inputs.size(1) - 1
     next_step = step + 1 if step < max_step else max_step
     next_input = trg_inputs[:, next_step].unsqueeze(1)
-    return top_idx, next_input
+    return top_idx.squeeze(2), next_input
 
 
 def greedy_sampler(final_distribution, **unused_args):

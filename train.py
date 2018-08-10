@@ -132,7 +132,6 @@ def train_one_batch(data_batch, model, optimizer,
                               dim=1).max().item()
     batch_size, seq_length = tag_indices_ext.size()
     optimizer.zero_grad()
-
     decoder_log_probs, reward, pred_indices = custom_forward(model,
                                                              word_indices,
                                                              word_length,
@@ -311,7 +310,7 @@ def read_training_data(opt):
 
     path = os.path.join(opt.training_dir, opt.training_file)
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
-    file_list = [(ele[0].split("$$"), ele[1].strip().split("\002")) for ele in
+    file_list = [(ele[0].split("$$"), ele[1].strip().split("\001")) for ele in
                  file_iter if
                  len(ele) == 2]
     tag_list = [remove_empty(tags) for tags, _ in file_list]

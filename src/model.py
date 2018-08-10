@@ -161,8 +161,8 @@ class CopyDecoder(nn.Module):
                                          nn.Sigmoid())
 
         if self.input_feeding:
-            self.dec_input_bridge = nn.Linear(decoder_hidden * 3,
-                                              decoder_hidden)
+            self.dec_input_bridge = nn.Linear(decoder_hidden * 2 + embedding_size,
+                                              embedding_size)
 
     def init_weights(self, init_range=1.0):
         """Initialize weights."""
@@ -225,7 +225,10 @@ class CopyDecoder(nn.Module):
             decoder_output, dec_hidden = self.rnn(decoder_input, dec_hidden)
 
             enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
-                decoder_output, enc_output, previous_encoder_decoder_attn)
+                decoder_output, enc_output, previous_encoder_decoder_attn
+            )
+
+
             previous_encoder_decoder_attn.append(enc_dec_logit)
 
             if decoder_outputs:
@@ -286,7 +289,7 @@ class Seq2SeqLSTMAttention(nn.Module):
                                    dropout=opt.dropout,
                                    attention_mode=opt.attention_mode,
                                    input_feeding=opt.input_feeding,
-                                   normalize=opt.normalize)
+                                   normalize=opt.normalize_attention)
 
     def forward(self, input_src, input_src_len,
                 input_trg, input_src_ext, max_oov_number, sampler):
