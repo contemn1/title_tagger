@@ -35,6 +35,7 @@ class Encoder(nn.Module):
                            num_layers=n_layers,
                            bidirectional=bidirectional,
                            batch_first=True)
+        self.dropout_layer = nn.Dropout(dropout)
         if n_layers > 1:
             assert (dropout is not None)
             self.rnn.dropout = dropout
@@ -88,6 +89,7 @@ class Encoder(nn.Module):
                                                     total_length=total_length)
 
         src_h = src_h.index_select(0, idx_unsort)
+        src_h = self.dropout_layer(src_h)
 
         # concatenate to (batch_size, hidden_size * num_directions)
         if self.rnn.bidirectional:
@@ -155,6 +157,7 @@ class CopyDecoder(nn.Module):
 
         self.softmax = nn.LogSoftmax(dim=-1)
         self.tanh = nn.Tanh()
+        self.dropout_layer = nn.Dropout(dropout)
 
         self.decoder2vocab = nn.Linear(decoder_hidden * 3, self.vocab_size)
         self.copy_switch = nn.Sequential(nn.Linear(self.hidden_dim * 3, 1),
@@ -223,6 +226,7 @@ class CopyDecoder(nn.Module):
                                                       dec_self_attention)
 
             decoder_output, dec_hidden = self.rnn(decoder_input, dec_hidden)
+            decoder_output = self.dropout_layer(decoder_output)
 
             enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
                 decoder_output, enc_output, previous_encoder_decoder_attn

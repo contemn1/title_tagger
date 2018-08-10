@@ -237,6 +237,7 @@ def train_model(model, optimizer, criterion,
                            best_optimizer)
 
         average_epoch_loss = np.mean(train_ml_losses)
+        save_model(opt.model_path, epoch, total_batch, model, optimizer)
         print("Loss for epoch {0} is: {1}".format(epoch, average_epoch_loss))
 
 
