@@ -154,7 +154,6 @@ class CopyDecoder(nn.Module):
         )
 
         self.softmax = nn.LogSoftmax(dim=-1)
-        self.dropout = nn.Dropout(dropout)
         self.tanh = nn.Tanh()
 
         self.decoder2vocab = nn.Linear(decoder_hidden * 3, self.vocab_size)
@@ -242,7 +241,6 @@ class CopyDecoder(nn.Module):
             decoder_logit = torch.cat((decoder_output, enc_dec_attention,
                                        dec_self_attention), 2)
 
-            decoder_logit = self.dropout(decoder_logit)
             generation_prob_dist = self.decoder2vocab(decoder_logit)
 
             copy_prob = self.copy_switch(decoder_logit)
