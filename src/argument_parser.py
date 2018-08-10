@@ -98,5 +98,7 @@ def init_argument_parser():
     parser.add_argument("--tag-index-map-name", type=str,
                         help="name of tag index map")
 
+    parser.add_argument("--normalize-attention", type=bool, default=False,
+                        help="whether to normalize encoder decoder attention")
 
     return parser.parse_args()

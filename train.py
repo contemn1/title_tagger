@@ -140,8 +140,6 @@ def train_one_batch(data_batch, model, optimizer,
                                                              word_indices_ext,
                                                              oov_per_batch,
                                                              tag_indices_ext)
-    print(tag_indices_ext)
-    print(pred_indices)
 
     # simply average losses of all the predicitons
     # IMPORTANT, must use logits instead of probs to compute the loss, otherwise it's super super slow at the beginning (grads of probs are small)!

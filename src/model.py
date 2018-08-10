@@ -285,7 +285,8 @@ class Seq2SeqLSTMAttention(nn.Module):
                                    n_layers=opt.dec_layers,
                                    dropout=opt.dropout,
                                    attention_mode=opt.attention_mode,
-                                   input_feeding=opt.input_feeding)
+                                   input_feeding=opt.input_feeding,
+                                   normalize=opt.normalize)
 
     def forward(self, input_src, input_src_len,
                 input_trg, input_src_ext, max_oov_number, sampler):
