@@ -311,11 +311,12 @@ def read_training_data(opt):
 
     path = os.path.join(opt.training_dir, opt.training_file)
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
-    file_list = [(ele[0].split("$$"), ele[1].strip().split("\001")) for ele in
-                 file_iter if
-                 len(ele) == 2]
-    tag_list = [remove_empty(tags) for tags, _ in file_list]
-    word_list = [remove_empty(words) for _, words in file_list]
+    file_list = ((ele[0].split("$$"), ele[1].strip().split("\001")) for ele in
+                 file_iter if len(ele) == 2)
+    file_list = ((remove_empty(tags), remove_empty(words)) for tags, words in file_list)
+    file_list = [ele for ele in file_list if ele[0] and ele[1]]
+    tag_list = [tags for tags, _ in file_list]
+    word_list = [words for _, words in file_list]
     return word_list, tag_list
 
 
