@@ -1,5 +1,7 @@
+from __future__ import absolute_import
 import torch
 from src.constants import PAD, BOS, EOS, UNK
+
 
 class Beam(object):
     """Ordered beam of candidate outputs."""
@@ -70,7 +72,8 @@ class Beam(object):
             beam_lk = word_lk
 
         flat_beam_lk = beam_lk.contiguous().view(-1)
-        best_scores, best_scores_id = flat_beam_lk.topk(self.size, 0, True, True)
+        best_scores, best_scores_id = flat_beam_lk.topk(self.size, 0, True,
+                                                        True)
         self.all_scores.append(self.scores)
         self.scores = best_scores
 
@@ -87,7 +90,6 @@ class Beam(object):
 
         if self.next_inputs[-1][0] == EOS:
             self.eos_top = True
-
 
     def sort_best(self):
         """Sort the beam."""

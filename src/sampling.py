@@ -1,6 +1,4 @@
-from src.constants import UNK
-import torch
-import copy
+from __future__ import absolute_import
 from src.constants import UNK
 import torch
 
