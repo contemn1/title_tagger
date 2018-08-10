@@ -100,5 +100,7 @@ def init_argument_parser():
 
     parser.add_argument("--normalize-attention", type=bool, default=False,
                         help="whether to normalize encoder decoder attention")
+    parser.add_argument("--store-dict", type=bool, default=True,
+                        help="whether to store word index map")
 
     return parser.parse_args()

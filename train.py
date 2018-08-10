@@ -16,7 +16,7 @@ from src.argument_parser import init_argument_parser
 from src.constants import EOS, PAD, BOS
 from src.custom_dataset import TextIndexDataset
 from src.data_util import restore_word_index_mapping, build_mapping_from_dict
-from src.data_util import read_file, build_dict_from_iterator
+from src.data_util import read_file, build_dict_from_iterator, output_iterator
 from src.model import Seq2SeqLSTMAttention
 from src.sampling import teacher_forcing_sampler, greedy_sampler, random_sampler
 
@@ -355,6 +355,13 @@ def main():
 
     (word_index_map, tag_index_map, index_word_map,
      index_tag_map, num_shared_words) = mappings
+
+    if opt.store_dict:
+        word_index_path = os.path.join(opt.model_path, opt.word_index_map_name)
+        tag_index_path = os.path.join(opt.model_path, opt.tag_index_map_name)
+        output_iterator(word_index_path, word_index_map.items())
+        output_iterator(tag_index_path, tag_index_map.items())
+        print("Succeed in storing dicts")
 
     training_size = int(len(word_list) * 0.8)
 
