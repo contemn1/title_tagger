@@ -83,7 +83,8 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
 
 def prepare_data(data_batch):
-    word_indices, word_indices_ext, word_length, tag_indices, tag_indices_ext, *_ = data_batch
+    (word_indices, word_indices_ext, word_length, tag_indices,
+     tag_indices_ext, words_list, tags_list, index_to_oov_list) = data_batch
     batch_size = tag_indices.size(0)
     sos_padding = np.full((batch_size, 1), BOS, dtype=np.int64)
     sos_padding = torch.from_numpy(sos_padding)
