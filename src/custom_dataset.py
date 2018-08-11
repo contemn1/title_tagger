@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import numpy as np
-from typing import List, Dict
 import torch
 from torch.utils.data import Dataset
 
@@ -11,7 +10,6 @@ from src.constants import PAD, EOS_WORD
 
 class TextIndexDataset(Dataset):
     def __init__(self, word_sequence, tag_sequence, word_to_index, tag_to_index):
-        # type: (List[List[str]], List[List[str]], Dict[str, int], Dict[str, int]) -> None
         """
         :param word_sequence: sequence of tokenized video titles
         :param tag_sequence: sequence of tags
@@ -61,7 +59,6 @@ class TextIndexDataset(Dataset):
 
 
 def pad(sequence_raw, pad_id):
-    # type: (List[int], int) -> tuple
     """
     :param sequence_raw: original sequence
     :param pad_id: a int number representing id of PAD character
