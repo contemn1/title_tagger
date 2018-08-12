@@ -8,4 +8,4 @@ python train.py --training-dir "${DATA_DIR}"  \
 --run-valid-every 10000 --save-model-every 20000 \
 --print-loss-every 200 --normalize-attention True \
 --dropout 0.5 --word-index-map-name "word_to_index_v2.txt" \
---tag-index-map-name "tag_to_index_v2" --store-dict True
+--tag-index-map-name "tag_to_index_v2.txt" --store-dict True

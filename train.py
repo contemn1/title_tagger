@@ -200,10 +200,7 @@ def train_model(model, optimizer, criterion,
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
-                print(predicted_indices)
-                print(batch[4])
-
-
+                
             train_ml_losses.append(loss_ml)
 
             if total_batch > 1 and total_batch % opt.run_valid_every == 0:
