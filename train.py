@@ -170,7 +170,7 @@ def train_one_batch(data_batch, model, optimizer,
     loss_output = loss.data.item()
     del decoder_log_probs, loss
 
-    return loss_output
+    return loss_output, pred_indices
 
 
 def train_model(model, optimizer, criterion,
@@ -191,15 +191,18 @@ def train_model(model, optimizer, criterion,
         for batch_i, batch in enumerate(train_data_loader):
             model.train()
             total_batch += 1
-            loss_ml = train_one_batch(batch, model,
-                                      optimizer,
-                                      forward_ml, criterion,
-                                      opt)
+            loss_ml, predicted_indices = train_one_batch(batch, model,
+                                                         optimizer,
+                                                         forward_ml, criterion,
+                                                         opt)
 
             if total_batch % opt.print_loss_every == 0:
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
+                print(predicted_indices)
+                print(batch[4])
+
 
             train_ml_losses.append(loss_ml)
 
@@ -238,7 +241,6 @@ def train_model(model, optimizer, criterion,
                            best_optimizer)
 
         average_epoch_loss = np.mean(train_ml_losses)
-        save_model(opt.model_path, epoch, total_batch, model, optimizer)
         print("Loss for epoch {0} is: {1}".format(epoch, average_epoch_loss))
 
 
@@ -314,7 +316,8 @@ def read_training_data(opt):
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
     file_list = ((ele[0].split("$$"), ele[1].strip().split("\001")) for ele in
                  file_iter if len(ele) == 2)
-    file_list = ((remove_empty(tags), remove_empty(words)) for tags, words in file_list)
+    file_list = ((remove_empty(tags), remove_empty(words)) for tags, words in
+                 file_list)
     file_list = [ele for ele in file_list if ele[0] and ele[1]]
     tag_list = [tags for tags, _ in file_list]
     word_list = [words for _, words in file_list]

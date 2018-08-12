@@ -225,7 +225,7 @@ class CopyDecoder(nn.Module):
                                                       dec_self_attention)
 
             decoder_output, dec_hidden = self.rnn(decoder_input, dec_hidden)
-            
+
             enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
                 decoder_output, enc_output, previous_encoder_decoder_attn
             )
