@@ -89,7 +89,6 @@ class Encoder(nn.Module):
                                                     total_length=total_length)
 
         src_h = src_h.index_select(0, idx_unsort)
-        src_h = self.dropout_layer(src_h)
 
         # concatenate to (batch_size, hidden_size * num_directions)
         if self.rnn.bidirectional:
@@ -226,8 +225,7 @@ class CopyDecoder(nn.Module):
                                                       dec_self_attention)
 
             decoder_output, dec_hidden = self.rnn(decoder_input, dec_hidden)
-            decoder_output = self.dropout_layer(decoder_output)
-
+            
             enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
                 decoder_output, enc_output, previous_encoder_decoder_attn
             )
