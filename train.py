@@ -317,7 +317,8 @@ def init_optimizer_criterion(model, opt):
 
 def read_training_data(opt):
     def remove_empty(input_list):
-        return [ele for ele in input_list if ele and ele.strip()]
+        striped = [ele.strip() for ele in input_list if ele]
+        return [ele for ele in striped if ele]
 
     path = os.path.join(opt.training_dir, opt.training_file)
     file_iter = read_file(path, pre_process=lambda x: x.strip().split("\t"))
@@ -346,7 +347,7 @@ def construct_mapping(word_list, tag_list, opt):
 
 
 def restore_mapping(opt):
-    word_path = os.path.join(opt.model_path, opt.word_index_map_name)
+    word_path = os.path.join(opt.previous_output_dir, opt.word_index_map_name)
     word_index_map, index_word_map = restore_word_index_mapping(word_path)
     tag_path = os.path.join(opt.model_path, opt.tag_index_map_name)
     tag_index_map, index_tag_map = restore_word_index_mapping(tag_path)
@@ -365,31 +366,31 @@ def main():
     mappings = restore_mapping(opt) if opt.restore_model \
         else construct_mapping(word_list, tag_list, opt)
 
-    (word_index_map, tag_index_map, index_word_map,
-     index_tag_map, num_shared_words) = mappings
+    (word_index_dict, tag_index_dict, index_word_dict,
+     index_tag_dict, num_shared_words) = mappings
 
     if opt.store_dict:
         word_index_path = os.path.join(opt.model_path, opt.word_index_map_name)
         tag_index_path = os.path.join(opt.model_path, opt.tag_index_map_name)
-        output_iterator(word_index_path, word_index_map.items())
-        output_iterator(tag_index_path, tag_index_map.items())
+        output_iterator(word_index_path, word_index_dict.items())
+        output_iterator(tag_index_path, tag_index_dict.items())
         print("Succeed in storing dicts")
 
     training_size = int(len(word_list) * 0.8)
 
     print("Number of words {0}, tags {1} an d shared_words {2}".format(
-        len(word_index_map),
-        len(tag_index_map),
+        len(word_index_dict),
+        len(tag_index_dict),
         num_shared_words))
     text_dataset_train = TextIndexDataset(word_list[:training_size],
                                           tag_list[:training_size],
-                                          word_index_map,
-                                          tag_index_map)
+                                          word_index_dict,
+                                          tag_index_dict)
 
     text_dataset_valid = TextIndexDataset(word_list[training_size:],
                                           tag_list[training_size:],
-                                          word_index_map,
-                                          tag_index_map)
+                                          word_index_dict,
+                                          tag_index_dict)
 
     train_loader = DataLoader(text_dataset_train, batch_size=opt.batch_size,
                               shuffle=True,
@@ -403,7 +404,7 @@ def main():
                               num_workers=num_threads,
                               pin_memory=torch.cuda.is_available())
 
-    vocab_size, vocab_size_decoder = len(word_index_map), len(tag_index_map)
+    vocab_size, vocab_size_decoder = len(word_index_dict), len(tag_index_dict)
     opt.vocab_size = vocab_size
     opt.vocab_size_decoder = vocab_size_decoder
     model = Seq2SeqLSTMAttention(opt, vocab_size, vocab_size_decoder)
@@ -414,7 +415,7 @@ def main():
 
     optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
     if opt.restore_model:
-        model_path = os.path.join(opt.model_path, opt.model_name)
+        model_path = os.path.join(opt.previous_output_dir, opt.model_name)
         load_pretrained_model(model_path, model, optimizer_ml, opt)
 
     train_model(model, optimizer_ml, criterion, train_loader,

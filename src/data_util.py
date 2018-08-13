@@ -96,18 +96,18 @@ def build_mapping_from_dict(word_dict, tag_dict):
     word_to_index = {PAD_WORD: 0, BOS_WORD: 1, EOS_WORD: 2, UNK_WORD: 3}
     tag_to_index = {PAD_WORD: 0, BOS_WORD: 1, EOS_WORD: 2, UNK_WORD: 3}
     initial_length = len(word_to_index)
-    shared_words = []
-    exclusive_words = []
-    exclusive_tags = []
+    shared_words = set()
+    exclusive_words = set()
+    exclusive_tags = set()
     for word in word_dict:
         if word in tag_dict:
-            shared_words.append(word)
+            shared_words.add(word)
         else:
-            exclusive_words.append(word)
+            exclusive_words.add(word)
 
     for tag in tag_dict:
         if tag not in word_dict:
-            exclusive_tags.append(tag)
+            exclusive_tags.add(tag)
 
     for index, word in enumerate(shared_words):
         word_to_index[word] = index + initial_length

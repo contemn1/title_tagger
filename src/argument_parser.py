@@ -102,5 +102,7 @@ def init_argument_parser():
                         help="whether to normalize encoder decoder attention")
     parser.add_argument("--store-dict", type=bool, default=True,
                         help="whether to store word index map")
+    parser.add_argument("--previous-output-dir", type=str,
+                        help="previous job output directory")
 
     return parser.parse_args()
