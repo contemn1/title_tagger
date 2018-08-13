@@ -40,13 +40,14 @@ def calculate_precision_recall(predicted_indices, target_indices):
     target_mask = (target_indices != 0).data.numpy()
     predicted_seq_length = (predicted_indices == EOS).detach().cpu().numpy()
     predicted_seq_length = np.argmax(predicted_seq_length, axis=1)
-    predicted_seq_length = np.where(predicted_seq_length == 0, max_length,
+    predicted_seq_length = np.where(predicted_seq_length == 0, max_length - 1,
                                     predicted_seq_length) + 1
 
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
     predicted_mask = np.array(predicted_mask, dtype=np.int64)
-    true_positive = (predicted_indices == target_indices).detach().cpu().numpy()
+    prediction_result = predicted_indices.detach().cpu()
+    true_positive = (prediction_result == target_indices).numpy()
     true_positive = true_positive * target_mask * predicted_mask
 
     true_positive = np.sum(true_positive, axis=1)
