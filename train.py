@@ -35,29 +35,35 @@ def forward_ml(model, word_indices, word_length, tag_indices,
     return decoder_log_probs, 1.0, predicted_indices
 
 
-def calculate_reward(predicted_indices, target_indices):
+def calculate_precision_recall(predicted_indices, target_indices):
     max_length = target_indices.size(1)
     target_mask = (target_indices != 0).data.numpy()
-    predicted_seq_length = (predicted_indices == EOS).cpu().numpy()
+    predicted_seq_length = (predicted_indices == EOS).detach().cpu().numpy()
     predicted_seq_length = np.argmax(predicted_seq_length, axis=1)
     predicted_seq_length = np.where(predicted_seq_length == 0, max_length,
-                                    predicted_seq_length)
+                                    predicted_seq_length) + 1
 
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
-    predicted_mask = np.array(predicted_mask)
-    true_positive = (predicted_indices == target_indices).data.numpy()
+    predicted_mask = np.array(predicted_mask, dtype=np.int64)
+    true_positive = (predicted_indices == target_indices).detach().cpu().numpy()
     true_positive = true_positive * target_mask * predicted_mask
 
     true_positive = np.sum(true_positive, axis=1)
     target_seq_length = np.sum(target_mask, axis=1)
     precision = true_positive / predicted_seq_length
     recall = true_positive / target_seq_length
+    return precision, recall
+
+
+def calculate_reward(predicted_indices, target_indices):
+    precision, recall = calculate_precision_recall(predicted_indices,
+                                                   target_indices)
     numerator = 2 * precision * recall
     denominator = precision + recall
     f1_score = np.where(numerator == 0, 0, numerator / denominator)
 
-    return np.average(f1_score)
+    return f1_score
 
 
 def forward_rl(model, word_indices, word_length, tag_indices,
@@ -173,8 +179,8 @@ def train_one_batch(data_batch, model, optimizer,
     return loss_output, pred_indices
 
 
-def train_model(model, optimizer, criterion,
-                train_data_loader, valid_data_loader, opt):
+def train_model(model, optimizer, criterion, train_data_loader,
+                valid_data_loader, opt):
     valid_history_losses = []
     best_loss = 100000.0  # for f-score
     stop_increasing = 0
@@ -197,10 +203,15 @@ def train_model(model, optimizer, criterion,
                                                          opt)
 
             if total_batch % opt.print_loss_every == 0:
+                precison, recall = calculate_precision_recall(predicted_indices,
+                                                              batch_i[4])
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
-                
+                print(precison)
+                print(recall)
+                print(recall)
+
             train_ml_losses.append(loss_ml)
 
             if total_batch > 1 and total_batch % opt.run_valid_every == 0:
@@ -282,7 +293,6 @@ def init_optimizer_criterion(model, opt):
     :param opt:
     :return:
     """
-
     criterion = torch.nn.NLLLoss(ignore_index=PAD)
 
     if opt.train_ml:
