@@ -209,9 +209,8 @@ def train_model(model, optimizer, criterion, train_data_loader,
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
-                print(precison)
-                print(recall)
-                print(recall)
+                print("Precision in batch{0} is {0:.2f}".format(np.mean(precison)))
+                print("Recall in batch{0} is {0:.2f}".format(np.mean(recall)))
 
             train_ml_losses.append(loss_ml)
 
