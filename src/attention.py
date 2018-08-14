@@ -80,12 +80,13 @@ class Attention(nn.Module):
         return energies.contiguous()
 
     def forward(self, hidden, encoder_outputs,
-                previous_attn=None):
+                previous_attn=None, attn_mask=None):
         """
         Compute the attention and h_tilde, inputs/outputs must be batch first
         :param hidden: (batch_size, trg_len, trg_hidden_dim)
         :param encoder_outputs: (batch_size, src_len, trg_hidden_dim), if this is dot attention, you have to convert enc_dim to as same as trg_dim first
         :param previous_attn: (batch_size, trg_len, src_len)
+        :param attn_mask: (batch_size, trg_len, src_len)
         :return:
             h_tilde (batch_size, trg_len, trg_hidden_dim)
             attn_weights (batch_size, trg_len, src_len)
@@ -94,6 +95,7 @@ class Attention(nn.Module):
 
         # hidden (batch_size, trg_len, trg_hidden_dim) * encoder_outputs (batch, src_len, src_hidden_dim).transpose(1, 2) -> (batch, trg_len, src_len)
         attn_energies = self.score(hidden, encoder_outputs)
+
         if self.scale:
             attn_energies = attn_energies / np.power(hidden.size(2), 0.5)
 
@@ -102,13 +104,17 @@ class Attention(nn.Module):
             previous_attn_tensor = torch.cat(previous_attn, dim=1)
             previous_attn_sum = torch.sum(previous_attn_tensor, 1, True)
             normalized_attn_energies = attn_energies / previous_attn_sum
-
+            if attn_mask is not None:
+                normalized_attn_energies.masked_fill_(attn_mask, 1e-10)
             normalized_attn_sum = torch.sum(normalized_attn_energies, 2, True)
 
             attn_weights = normalized_attn_energies / normalized_attn_sum
 
         else:
-            attn_weights = self.softmax(attn_energies)
+            masked_energies = attn_energies
+            if attn_mask is not None:
+                masked_energies.data.masked_fill_(attn_mask, -1e10)
+            attn_weights = self.softmax(masked_energies)
 
         # reweighting context, attn (batch_size, trg_len, src_len) * encoder_outputs (batch_size, src_len, src_hidden_dim) = (batch_size, trg_len, src_hidden_dim)
         weighted_context = torch.bmm(attn_weights, encoder_outputs)

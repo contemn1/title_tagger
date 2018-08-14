@@ -207,12 +207,14 @@ def train_model(model, optimizer, criterion, train_data_loader,
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
-                if loss_ml < 3.5:
+                if loss_ml < 2.50:
                     precison, recall = calculate_precision_recall(
                         predicted_indices,
                         batch[4])
-                    print("Precision in batch{0} is {0:.2f}".format(np.mean(precison)))
-                    print("Recall in batch{0} is {0:.2f}".format(np.mean(recall)))
+                    print("Precision in batch{0} is {1:.2f}".format(batch_i,
+                                                                    np.mean(precison)))
+                    print("Recall in batch{0} is {1:.2f}".format(batch_i,
+                                                                 np.mean(recall)))
 
             train_ml_losses.append(loss_ml)
 

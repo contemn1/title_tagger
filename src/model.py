@@ -5,7 +5,7 @@ from torch import nn
 from src.attention import Attention
 from src.constants import PAD
 from src.util import merge_copy_generation
-from src.constants import UNK
+from src.constants import UNK, PAD
 
 
 class Encoder(nn.Module):
@@ -218,6 +218,7 @@ class CopyDecoder(nn.Module):
         predicted_indices_batch = []
         previous_encoder_decoder_attn = []
 
+        encoder_mask = (enc_input_ext == PAD).unsqueeze(1)
         for di in range(max_length):
             trg_emb = self.embedding(trg_input)  # (batch_size, 1, embed_dim)
             decoder_input = self.merge_decoder_inputs(trg_emb,
@@ -227,7 +228,8 @@ class CopyDecoder(nn.Module):
             decoder_output, dec_hidden = self.rnn(decoder_input, dec_hidden)
 
             enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
-                decoder_output, enc_output, previous_encoder_decoder_attn
+                decoder_output, enc_output, previous_encoder_decoder_attn,
+                attn_mask=encoder_mask
             )
 
 
