@@ -247,7 +247,7 @@ def train_model(model, optimizer, criterion, train_data_loader,
                 else:
                     stop_increasing += 1
 
-                if stop_increasing >= opt.early_stop_tolerance:
+                if stop_increasing >= opt.early_stop_tolerance and loss_epoch_mean < 2.0:
                     message = "Have not increased for {0} epoches, early stop training"
                     print(message.format(epoch))
                     early_stop_flag = True
