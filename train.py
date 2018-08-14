@@ -5,6 +5,7 @@ import logging
 import multiprocessing
 import os
 import time
+import io
 
 import numpy as np
 import torch
@@ -270,7 +271,8 @@ def save_model(model_directory, model_name, epoch, model, optimizer):
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict()
     }
-    torch.save(state, model_path)
+    with io.open(model_path, mode="w+") as file:
+        torch.save(state, file)
 
 
 def beam_search_one_batch(data_batch, model):
