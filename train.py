@@ -43,7 +43,9 @@ def calculate_precision_recall(predicted_indices, target_indices):
     predicted_seq_length = np.argmax(predicted_seq_length, axis=1)
     predicted_seq_length = np.where(predicted_seq_length == 0, max_length - 1,
                                     predicted_seq_length) + 1
-
+    print(predicted_indices)
+    print(predicted_seq_length)
+    
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
     predicted_mask = np.array(predicted_mask, dtype=np.int64)
@@ -208,7 +210,7 @@ def train_model(model, optimizer, criterion, train_data_loader,
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
-                if loss_ml < 2.5:
+                if loss_ml < 3.5:
                     precison, recall = calculate_precision_recall(
                         predicted_indices,
                         batch[4])
