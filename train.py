@@ -274,8 +274,7 @@ def save_model(model_directory, model_name, epoch, model, optimizer):
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict()
     }
-    with io.open(model_path, mode="w+") as file:
-        torch.save(state, file)
+    torch.save(state, model_path)
 
 
 def beam_search_one_batch(data_batch, model):
