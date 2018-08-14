@@ -208,7 +208,7 @@ def train_model(model, optimizer, criterion, train_data_loader,
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
                 ))
-                if loss_ml < 2.0:
+                if loss_ml < 2.5:
                     precison, recall = calculate_precision_recall(
                         predicted_indices,
                         batch[4])
