@@ -45,7 +45,7 @@ def calculate_precision_recall(predicted_indices, target_indices):
                                     predicted_seq_length) + 1
     print(predicted_indices)
     print(predicted_seq_length)
-    
+
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
     predicted_mask = np.array(predicted_mask, dtype=np.int64)
