@@ -240,7 +240,7 @@ def train_model(model, optimizer, criterion, train_data_loader,
                     best_loss = loss_epoch_mean
                     stop_increasing = 0
                     model_name = "best/video_tagger_checkpoint_epoch{0}_batch_{1}.pt"
-                    model_name = model_name.format(epoch, batch)
+                    model_name = model_name.format(epoch, batch_i)
                     save_model(opt.model_path, model_name, epoch,
                                best_model, best_optimizer)
 
@@ -255,7 +255,7 @@ def train_model(model, optimizer, criterion, train_data_loader,
 
             if total_batch > 1 and (total_batch % opt.save_model_every == 0):
                 model_name = "video_tagger_checkpoint_epoch{0}_batch_{1}.pt"
-                model_name = model_name.format(epoch, batch)
+                model_name = model_name.format(epoch, batch_i)
                 save_model(opt.model_path, model_name, epoch, model, optimizer)
 
         average_epoch_loss = np.mean(train_ml_losses)
