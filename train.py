@@ -240,7 +240,7 @@ def train_model(model, optimizer, criterion, train_data_loader,
                     best_optimizer = copy.deepcopy(optimizer)
                     best_loss = loss_epoch_mean
                     stop_increasing = 0
-                    best_dir = os.path.join(opt.model_directory, "best")
+                    best_dir = os.path.join(opt.model_path, "best")
                     if not os.path.exists(best_dir):
                         os.mkdir(best_dir)
                     model_name = "best/video_tagger_checkpoint_epoch{0}_batch_{1}.pt"
