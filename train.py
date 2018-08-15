@@ -87,7 +87,11 @@ def forward_rl(model, word_indices, word_length, tag_indices,
 
     baseline_reward = calculate_reward(sampling_indices, tag_indices_ext)
     sampling_reward = calculate_reward(greedy_indices, tag_indices_ext)
-    return sampling_log_probs, sampling_reward - baseline_reward, sampling_indices
+    final_reward = torch.from_numpy(sampling_reward - baseline_reward)
+    final_reward.requires_grad_(False)
+    if torch.cuda.is_available():
+        final_reward = final_reward.cuda()
+    return sampling_log_probs, final_reward, sampling_indices
 
 
 def prepare_data(data_batch):
@@ -133,7 +137,7 @@ def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
 
 
 def train_one_batch(data_batch, model, optimizer,
-                    custom_forward, criterion, opt):
+                    custom_forward, criterion, opt, factor=1.0):
     vocab_size = opt.vocab_size_decoder
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
@@ -156,12 +160,17 @@ def train_one_batch(data_batch, model, optimizer,
         decoder_log_probs.contiguous().view(batch_size * seq_length, -1),
         tag_indices_ext.contiguous().view(-1))
 
+    loss_length = torch.sum(loss != 0, dtype=torch.float)
+    loss *= factor
     logging.info(
         "--loss calculation- {0} seconds -- ".format(time.time() - start_time))
-
-    if loss != 1.0:
+    if isinstance(reward, torch.FloatTensor) or isinstance(reward,
+                                                           torch.cuda.FloatTensor):
+        reward = reward.unsqueeze(1).repeat(1, seq_length).view(-1, 1).squeeze(
+            1)
         loss *= reward
 
+    loss = torch.sum(loss) / loss_length
     start_time = time.time()
     loss.backward()
     logging.info("--backward- {0} seconds -- ".format(time.time() - start_time))
@@ -175,14 +184,18 @@ def train_one_batch(data_batch, model, optimizer,
         logging.info('clip grad (%f -> %f)' % (pre_norm, after_norm))
 
     optimizer.step()
-    loss_output = loss.data.item()
+    loss_output = torch.mean(loss).detach().cpu().item()
     del decoder_log_probs, loss
 
     return loss_output, pred_indices
 
 
-def train_model(model, optimizer, criterion, train_data_loader,
-                valid_data_loader, opt):
+def train_model(model, train_data_loader, valid_data_loader, opt):
+    optimizer, criterion = init_optimizer_criterion(model, opt)
+    if opt.restore_model:
+        model_path = os.path.join(opt.previous_output_dir, opt.model_name)
+        load_pretrained_model(model_path, model, opt, optimizer)
+
     valid_history_losses = []
     best_loss = 100000.0  # for f-score
     stop_increasing = 0
@@ -199,11 +212,20 @@ def train_model(model, optimizer, criterion, train_data_loader,
         for batch_i, batch in enumerate(train_data_loader):
             model.train()
             total_batch += 1
+            ml_factor = 1.0 if not opt.train_rl else 1 - opt.rl_rate
             loss_ml, predicted_indices = train_one_batch(batch, model,
                                                          optimizer,
                                                          forward_ml, criterion,
-                                                         opt)
+                                                         opt,
+                                                         ml_factor)
 
+            if opt.train_rl:
+                loss_rl, predicted_indices = train_one_batch(batch, model,
+                                                             optimizer,
+                                                             forward_rl,
+                                                             criterion,
+                                                             opt,
+                                                             opt.rl_rate)
             if total_batch % opt.print_loss_every == 0:
                 print("Training loss in batch {0} is {1:.2f}".format(
                     total_batch, loss_ml
@@ -213,9 +235,11 @@ def train_model(model, optimizer, criterion, train_data_loader,
                         predicted_indices,
                         batch[4])
                     print("Precision in batch{0} is {1:.2f}".format(batch_i,
-                                                                    np.mean(precison)))
+                                                                    np.mean(
+                                                                        precison)))
                     print("Recall in batch{0} is {1:.2f}".format(batch_i,
-                                                                 np.mean(recall)))
+                                                                 np.mean(
+                                                                     recall)))
 
             train_ml_losses.append(loss_ml)
 
@@ -305,26 +329,18 @@ def init_optimizer_criterion(model, opt):
     :param opt:
     :return:
     """
-    criterion = torch.nn.NLLLoss(ignore_index=PAD)
 
-    if opt.train_ml:
-        optimizer_ml = Adam(
-            params=filter(lambda p: p.requires_grad, model.parameters()),
-            lr=opt.learning_rate)
-    else:
-        optimizer_ml = None
+    criterion = torch.nn.NLLLoss(ignore_index=PAD,
+                                 reduce=False)
 
-    if opt.train_rl:
-        optimizer_rl = Adam(
-            params=filter(lambda p: p.requires_grad, model.parameters()),
-            lr=opt.learning_rate_rl)
-    else:
-        optimizer_rl = None
+    optimizer_ml = Adam(
+        params=filter(lambda p: p.requires_grad, model.parameters()),
+        lr=opt.learning_rate)
 
     if torch.cuda.is_available():
         criterion = criterion.cuda()
 
-    return optimizer_ml, optimizer_rl, criterion
+    return optimizer_ml, criterion
 
 
 def read_training_data(opt):
@@ -344,11 +360,11 @@ def read_training_data(opt):
     return word_list, tag_list
 
 
-def load_pretrained_model(model_path, model, optimizer, opt):
+def load_pretrained_model(model_path, model, opt, optimizer_ml):
     if os.path.exists(model_path):
         check_point = torch.load(model_path, lambda storage, location: storage)
         model.load_state_dict(check_point["model_state_dict"])
-        optimizer.load_state_dict(check_point["optimizer_state_dict"])
+        optimizer_ml.load_state_dict(check_point["optimizer_state_dict"])
         opt.start_epoch = check_point["epoch"] + 1
 
 
@@ -361,7 +377,7 @@ def construct_mapping(word_list, tag_list, opt):
 def restore_mapping(opt):
     word_path = os.path.join(opt.previous_output_dir, opt.word_index_map_name)
     word_index_map, index_word_map = restore_word_index_mapping(word_path)
-    tag_path = os.path.join(opt.model_path, opt.tag_index_map_name)
+    tag_path = os.path.join(opt.previous_output_dir, opt.tag_index_map_name)
     tag_index_map, index_tag_map = restore_word_index_mapping(tag_path)
     num_shared = 0
     for tag in tag_index_map:
@@ -425,13 +441,7 @@ def main():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
 
-    optimizer_ml, optimizer_rl, criterion = init_optimizer_criterion(model, opt)
-    if opt.restore_model:
-        model_path = os.path.join(opt.previous_output_dir, opt.model_name)
-        load_pretrained_model(model_path, model, optimizer_ml, opt)
-
-    train_model(model, optimizer_ml, criterion, train_loader,
-                valid_loader, opt)
+    train_model(model, train_loader, valid_loader, opt)
 
 
 if __name__ == '__main__':

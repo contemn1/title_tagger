@@ -45,10 +45,12 @@ def init_argument_parser():
                         metavar="N",
                         help="whether to use maximum log likelihood in loss function")
 
-    parser.add_argument("--train-rl", type=bool, default=True,
+    parser.add_argument("--train-rl", type=bool, default=False,
                         metavar="N",
                         help="whether to use self crictic in loss function")
 
+    parser.add_argument("--rl-rate", type=float, default=0.9,
+                        help="factor of reinforcement learning")
     parser.add_argument("--learning-rate", type=float, default=0.001,
                         metavar="N",
                         help="learning rate for maximum likelihood")
