@@ -77,7 +77,7 @@ class Beam(object):
         self.all_scores.append(self.scores)
         self.scores = best_scores
 
-        prev_k = best_scores_id / num_words
+        prev_k = best_scores_id // num_words
         self.previous_paths.append(prev_k)
         self.next_inputs.append(best_scores_id - prev_k * num_words)
 
