@@ -26,5 +26,5 @@ else
     --early-stop-tolerance 45 \
     --print-loss-every 200 --normalize-attention True \
     --dropout 0.5 --word-index-map-name "word_to_index_v3.txt" \
-    --tag-index-map-name "tag_to_index_v3.txt" --store-dict True \
+    --tag-index-map-name "tag_to_index_v3.txt" --store-dict True
 fi
