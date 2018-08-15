@@ -130,7 +130,11 @@ def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
             decoder_log_probs.contiguous().view(batch_size * seq_length, -1),
             tag_indices_ext.contiguous().view(-1)
         )
+        loss_length = torch.sum(loss != 0, dtype=torch.float)
+
+        loss = torch.sum(loss) / loss_length
         loss_item = loss.item()
+
         del loss
 
     return loss_item, predicted_indices
