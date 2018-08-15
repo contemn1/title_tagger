@@ -37,8 +37,9 @@ def forward_ml(model, word_indices, word_length, tag_indices,
 
 
 def calculate_precision_recall(predicted_indices, target_indices):
+    target_indices = target_indices.detach().cpu()
     max_length = target_indices.size(1)
-    target_mask = (target_indices != 0).detach().cpu().numpy()
+    target_mask = (target_indices != 0).numpy()
     predicted_seq_length = (predicted_indices == EOS).detach().cpu().numpy()
     predicted_seq_length = np.argmax(predicted_seq_length, axis=1)
     predicted_seq_length = np.where(predicted_seq_length == 0, max_length - 1,
