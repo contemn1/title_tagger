@@ -53,8 +53,8 @@ def calculate_precision_recall(predicted_indices, target_indices):
 
     true_positive = np.sum(true_positive, axis=1)
     target_seq_length = np.sum(target_mask, axis=1)
-    precision = true_positive / predicted_seq_length
-    recall = true_positive / target_seq_length
+    precision = np.divide(true_positive, predicted_seq_length, dtype=np.float32)
+    recall = np.divide(true_positive, target_seq_length, dtype=np.float32)
     return precision, recall
 
 
@@ -248,7 +248,7 @@ def train_model(model, train_data_loader, valid_data_loader, opt):
                                                          opt,
                                                          ml_factor,
                                                          print_ml)
-            small_loss = loss_ml < 2.5
+            small_loss = loss_ml < 0.25
             if small_loss:
                 precison, recall = calculate_precision_recall(predicted_indices,
                                                               batch[4])
@@ -264,8 +264,6 @@ def train_model(model, train_data_loader, valid_data_loader, opt):
                                                              opt,
                                                              opt.rl_rate,
                                                              print_rl)
-
-                print_loss_per_epoch(should_print, total_batch, loss_rl)
 
             train_ml_losses.append(loss_ml)
 
