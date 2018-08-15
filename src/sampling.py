@@ -15,13 +15,12 @@ def teacher_forcing_sampler(final_distribution, trg_inputs, step,
 
 def greedy_sampler(final_distribution, *unused_args, **unused_kargs):
     top_v, top_idx = final_distribution.topk(1, dim=-1)
-    predicted_index = top_idx.squeeze(2)
-    return predicted_index, top_idx
+    top_idx = top_idx.squeeze(2)
+    return top_idx, top_idx
 
 
 def random_sampler(final_distribution, *unused_args, **unused_kargs):
     categorical_distribution = torch.distributions.categorical.Categorical(
         logits=final_distribution)
     top_idx = categorical_distribution.sample()
-    trg_input = top_idx.unsqueeze(1)
-    return top_idx, trg_input
+    return top_idx, top_idx

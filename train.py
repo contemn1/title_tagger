@@ -136,8 +136,8 @@ def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
     return loss_item, predicted_indices
 
 
-def train_one_batch(data_batch, model, optimizer,
-                    custom_forward, criterion, opt, factor=1.0):
+def train_one_batch(data_batch, model, optimizer, custom_forward,
+                    criterion, opt, factor=1.0, print_func=None):
     vocab_size = opt.vocab_size_decoder
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
@@ -169,6 +169,9 @@ def train_one_batch(data_batch, model, optimizer,
         reward = reward.unsqueeze(1).repeat(1, seq_length).view(-1, 1).squeeze(
             1)
         loss *= reward
+        if print_func is not None:
+            f1_template = "F1 score in batch {0} is {1:.2f}"
+            print_func(f1_template, torch.mean(reward).detach().item())
 
     loss = torch.sum(loss) / loss_length
     start_time = time.time()
@@ -185,9 +188,33 @@ def train_one_batch(data_batch, model, optimizer,
 
     optimizer.step()
     loss_output = torch.mean(loss).detach().cpu().item()
+    if print_func is not None:
+        loss_template = "Training loss in batch {0} is {1:.2f}"
+        print_func(loss_template, loss_output)
+
     del decoder_log_probs, loss
 
     return loss_output, pred_indices
+
+
+def print_loss_per_epoch(pred, batch, loss):
+    if pred:
+        print("Training loss in batch {0} is {1:.2f}".format(batch, loss))
+
+
+def print_precision_recall(pred, batch, precison, recall):
+    if pred:
+        print(
+            "Precision in batch{0} is {1:.2f}".format(batch, np.mean(precison)))
+        print("Recall in batch{0} is {1:.2f}".format(batch, np.mean(recall)))
+
+
+def print_factory(pred, batch):
+    def print_function(string_template, content):
+        if pred:
+            print(string_template.format(batch, content))
+
+    return print_function
 
 
 def train_model(model, train_data_loader, valid_data_loader, opt):
@@ -213,33 +240,32 @@ def train_model(model, train_data_loader, valid_data_loader, opt):
             model.train()
             total_batch += 1
             ml_factor = 1.0 if not opt.train_rl else 1 - opt.rl_rate
+            should_print = total_batch % opt.print_loss_every == 0
+            print_ml = print_factory(should_print, total_batch)
             loss_ml, predicted_indices = train_one_batch(batch, model,
                                                          optimizer,
                                                          forward_ml, criterion,
                                                          opt,
-                                                         ml_factor)
+                                                         ml_factor,
+                                                         print_ml)
+            small_loss = loss_ml < 2.5
+            if small_loss:
+                precison, recall = calculate_precision_recall(predicted_indices,
+                                                              batch[4])
+                print_precision_recall(small_loss, total_batch, precison,
+                                       recall)
 
             if opt.train_rl:
+                print_rl = print_factory(should_print, total_batch)
                 loss_rl, predicted_indices = train_one_batch(batch, model,
                                                              optimizer,
                                                              forward_rl,
                                                              criterion,
                                                              opt,
-                                                             opt.rl_rate)
-            if total_batch % opt.print_loss_every == 0:
-                print("Training loss in batch {0} is {1:.2f}".format(
-                    total_batch, loss_ml
-                ))
-                if loss_ml < 2.5:
-                    precison, recall = calculate_precision_recall(
-                        predicted_indices,
-                        batch[4])
-                    print("Precision in batch{0} is {1:.2f}".format(batch_i,
-                                                                    np.mean(
-                                                                        precison)))
-                    print("Recall in batch{0} is {1:.2f}".format(batch_i,
-                                                                 np.mean(
-                                                                     recall)))
+                                                             opt.rl_rate,
+                                                             print_rl)
+
+                print_loss_per_epoch(should_print, total_batch, loss_rl)
 
             train_ml_losses.append(loss_ml)
 
