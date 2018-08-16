@@ -79,9 +79,17 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
     for idx, index_per_line in enumerate(indices_numpy):
         oov_dict = oov_list[idx]
         length_per_line = seq_lengths[idx]
-        words_per_line = [index_to_word[ele] if ele < len(index_to_word)
-                          else oov_dict[ele] for ele in
-                          index_per_line[:length_per_line]]
+        words_per_line = []
+        for ele in index_per_line[:length_per_line]:
+            if ele < len(index_to_word):
+                words_per_line.append(index_to_word[ele])
+            if ele in oov_dict:
+                print(ele, oov_dict[ele])
+                words_per_line.append(oov_dict[ele])
+            else:
+                print(ele)
+                print(oov_dict)
+
         words_list.append(words_per_line)
     return words_list
 
@@ -239,6 +247,14 @@ def print_factory(pred, batch):
     return print_function
 
 
+def print_prediction_result(predicted_tags, batch):
+    for index, tag_per_line in enumerate(predicted_tags):
+        tag_per_line = "$$".join(tag_per_line[:-1])
+        gold_tags = "$$".join(batch[-2][index][:-1])
+        words = "".join(batch[-3][index])
+        print(words + "\t" + gold_tags + "\t" + tag_per_line)
+
+
 def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                 opt):
     optimizer, criterion = init_optimizer_criterion(model, opt)
@@ -279,11 +295,7 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                                                            index_to_tags,
                                                            batch[-1],
                                                            seq_length)
-                for index, tag_per_line in enumerate(predicted_tags):
-                    tag_per_line = "$$".join(tag_per_line[:-1])
-                    gold_tags = "$$".join(batch[-2][index][:-1])
-                    words = "".join(batch[-3][index])
-                    print(words + "\t" + gold_tags + "\t" + tag_per_line)
+                
 
             if opt.train_rl:
                 print_rl = print_factory(should_print, total_batch)
