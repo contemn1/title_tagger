@@ -83,7 +83,7 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
         for ele in index_per_line[:length_per_line]:
             if ele < len(index_to_word):
                 words_per_line.append(index_to_word[ele])
-            if ele in oov_dict:
+            elif ele in oov_dict:
                 print(ele, oov_dict[ele])
                 words_per_line.append(oov_dict[ele])
             else:
