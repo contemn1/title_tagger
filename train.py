@@ -36,19 +36,23 @@ def forward_ml(model, word_indices, word_length, tag_indices,
     return decoder_log_probs, 1.0, predicted_indices
 
 
-def calculate_precision_recall(predicted_indices, target_indices):
-    target_indices = target_indices.detach().cpu()
-    max_length = target_indices.size(1)
-    target_mask = (target_indices != 0).numpy()
-    predicted_seq_length = (predicted_indices == EOS).detach().cpu().numpy()
+def calculate_length(predicted_indices, max_length):
+    predicted_seq_length = (predicted_indices == EOS).numpy()
     predicted_seq_length = np.argmax(predicted_seq_length, axis=1)
     predicted_seq_length = np.where(predicted_seq_length == 0, max_length - 1,
                                     predicted_seq_length) + 1
+    return predicted_seq_length
 
+
+def calculate_precision_recall(predicted_indices, target_indices):
+    prediction_result = predicted_indices.detach().cpu()
+    target_indices = target_indices.detach().cpu()
+    max_length = target_indices.size(1)
+    target_mask = (target_indices != 0).numpy()
+    predicted_seq_length = calculate_length(prediction_result, max_length)
     predicted_mask = [np.concatenate((np.ones(ele), np.zeros(max_length - ele)))
                       for ele in predicted_seq_length]
     predicted_mask = np.array(predicted_mask, dtype=np.int64)
-    prediction_result = predicted_indices.detach().cpu()
     true_positive = (prediction_result == target_indices).numpy()
     true_positive = true_positive * target_mask * predicted_mask
 
@@ -67,6 +71,19 @@ def calculate_reward(predicted_indices, target_indices):
     f1_score = np.where(numerator == 0, 0, numerator / denominator)
 
     return f1_score
+
+
+def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
+    indices_numpy = indices.detach().cpu().numpy()
+    words_list = []
+    for idx, index_per_line in enumerate(indices_numpy):
+        oov_dict = oov_list[idx]
+        length_per_line = seq_lengths[idx]
+        words_per_line = [index_to_word[ele] if ele < len(index_to_word)
+                          else oov_dict[ele] for ele in
+                          index_per_line[:length_per_line]]
+        words_list.append(words_per_line)
+    return words_list
 
 
 def forward_rl(model, word_indices, word_length, tag_indices,
@@ -222,7 +239,8 @@ def print_factory(pred, batch):
     return print_function
 
 
-def train_model(model, train_data_loader, valid_data_loader, opt):
+def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
+                opt):
     optimizer, criterion = init_optimizer_criterion(model, opt)
     if opt.restore_model:
         model_path = os.path.join(opt.previous_output_dir, opt.model_name)
@@ -253,10 +271,18 @@ def train_model(model, train_data_loader, valid_data_loader, opt):
                                                          opt,
                                                          ml_factor,
                                                          print_ml)
-            small_loss = loss_ml < 0.25
-            if small_loss:
+            small_loss = loss_ml < 1.5
+            if small_loss and should_print:
                 precison, recall = calculate_precision_recall(predicted_indices,
                                                               batch[4])
+                seq_length = calculate_length(predicted_indices,
+                                              predicted_indices.size(1))
+                predicted_tags = predicted_indices_to_tags(predicted_indices,
+                                                           index_to_tags,
+                                                           batch[-1],
+                                                           seq_length)
+
+                print(predicted_tags)
                 print_precision_recall(small_loss, total_batch, precison,
                                        recall)
 
@@ -470,7 +496,7 @@ def main():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
 
-    train_model(model, train_loader, valid_loader, opt)
+    train_model(model, train_loader, valid_loader, index_tag_dict, opt)
 
 
 if __name__ == '__main__':
