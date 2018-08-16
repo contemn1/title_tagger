@@ -83,13 +83,8 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
         for ele in index_per_line[:length_per_line]:
             if ele < len(index_to_word):
                 words_per_line.append(index_to_word[ele])
-            elif ele in oov_dict:
-                print(ele, oov_dict[ele])
+            if ele in oov_dict:
                 words_per_line.append(oov_dict[ele])
-            else:
-                print("index {0} larger than length {1}".format(ele,
-                                                                len(index_to_word)))
-                print("index {0} not in oov dict {1}".format(ele, oov_dict))
 
         words_list.append(words_per_line)
     return words_list
@@ -290,12 +285,12 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                                                          print_ml)
             small_loss = loss_ml < 1.5
             if small_loss and should_print:
-                seq_length = calculate_length(predicted_indices.detach().cpu(),
-                                              predicted_indices.size(1))
-                predicted_tags = predicted_indices_to_tags(predicted_indices,
-                                                           index_to_tags,
-                                                           batch[-1],
-                                                           seq_length)
+                precision, recall = calculate_precision_recall(predicted_indices,
+                                                               batch[4])
+                print_precision_recall(small_loss,
+                                       total_batch,
+                                       precision,
+                                       recall)
 
             if opt.train_rl:
                 print_rl = print_factory(should_print, total_batch)

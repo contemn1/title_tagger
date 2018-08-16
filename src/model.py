@@ -90,6 +90,7 @@ class Encoder(nn.Module):
                                                     total_length=total_length)
 
         src_h = src_h.index_select(0, idx_unsort)
+        src_h = self.dropout_layer(src_h)
 
         # concatenate to (batch_size, hidden_size * num_directions)
         if self.rnn.bidirectional:
@@ -246,6 +247,7 @@ class CopyDecoder(nn.Module):
             decoder_logit = torch.cat((decoder_output, enc_dec_attention,
                                        dec_self_attention), 2)
 
+            decoder_logit = self.dropout_layer(decoder_logit)
             generation_prob_dist = self.decoder2vocab(decoder_logit)
 
             copy_prob = self.copy_switch(decoder_logit)
