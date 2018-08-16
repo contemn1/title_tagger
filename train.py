@@ -295,7 +295,6 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                                                            index_to_tags,
                                                            batch[-1],
                                                            seq_length)
-                
 
             if opt.train_rl:
                 print_rl = print_factory(should_print, total_batch)
