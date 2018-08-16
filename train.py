@@ -273,18 +273,17 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                                                          print_ml)
             small_loss = loss_ml < 1.5
             if small_loss and should_print:
-                precison, recall = calculate_precision_recall(predicted_indices,
-                                                              batch[4])
                 seq_length = calculate_length(predicted_indices.detach().cpu(),
                                               predicted_indices.size(1))
                 predicted_tags = predicted_indices_to_tags(predicted_indices,
                                                            index_to_tags,
                                                            batch[-1],
                                                            seq_length)
-
-                print(predicted_tags)
-                print_precision_recall(small_loss, total_batch, precison,
-                                       recall)
+                for index, tag_per_line in enumerate(predicted_tags):
+                    tag_per_line = "$$".join(tag_per_line[:-1])
+                    gold_tags = "$$".join(batch[-2][index][:-1])
+                    words = "".join(batch[-3][index])
+                    print(words + "\t" + gold_tags + "\t" + tag_per_line)
 
             if opt.train_rl:
                 print_rl = print_factory(should_print, total_batch)
