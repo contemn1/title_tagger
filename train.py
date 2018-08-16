@@ -275,7 +275,7 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
             if small_loss and should_print:
                 precison, recall = calculate_precision_recall(predicted_indices,
                                                               batch[4])
-                seq_length = calculate_length(predicted_indices,
+                seq_length = calculate_length(predicted_indices.detach().cpu(),
                                               predicted_indices.size(1))
                 predicted_tags = predicted_indices_to_tags(predicted_indices,
                                                            index_to_tags,
