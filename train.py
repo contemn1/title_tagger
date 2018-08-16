@@ -87,6 +87,8 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
                 print(ele, oov_dict[ele])
                 words_per_line.append(oov_dict[ele])
             else:
+                print("index {0} larger than length {1}".format(ele,
+                                                                len(index_to_word)))
                 print("index {0} not in oov dict {1}".format(ele, oov_dict))
 
         words_list.append(words_per_line)
