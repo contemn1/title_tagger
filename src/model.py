@@ -90,7 +90,6 @@ class Encoder(nn.Module):
                                                     total_length=total_length)
 
         src_h = src_h.index_select(0, idx_unsort)
-        src_h = self.dropout_layer(src_h)
 
         # concatenate to (batch_size, hidden_size * num_directions)
         if self.rnn.bidirectional:

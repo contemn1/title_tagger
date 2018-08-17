@@ -251,6 +251,31 @@ def print_prediction_result(predicted_tags, batch):
         print(words + "\t" + gold_tags + "\t" + tag_per_line)
 
 
+def inference_one_epoch(model, valid_data_laoder, index_to_tags, opt):
+    optimizer, criterion = init_optimizer_criterion(model, opt)
+    if opt.restore_model:
+        model_path = os.path.join(opt.previous_output_dir, opt.model_name)
+        load_pretrained_model(model_path, model, opt, optimizer)
+
+    model.eval()
+    for batch_i, batch_data in enumerate(valid_data_laoder):
+        with torch.no_grad():
+            loss_valid, predicted_indices = inference_one_batch(
+                batch_data, model, criterion,
+                teacher_forcing_sampler, opt.vocab_size_decoder)
+
+            max_length = predicted_indices.size(1)
+
+            oov_list = batch_data[-1]
+            seq_length = calculate_length(predicted_indices, max_length)
+            predicted_tags = predicted_indices_to_tags(predicted_indices,
+                                                       index_to_tags,
+                                                       oov_list,
+                                                       seq_length)
+
+            print_prediction_result(predicted_tags, batch_data)
+
+
 def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                 opt):
     optimizer, criterion = init_optimizer_criterion(model, opt)
@@ -301,7 +326,6 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                                                              opt,
                                                              opt.rl_rate,
                                                              print_rl)
-
             train_ml_losses.append(loss_ml)
 
             if total_batch > 1 and total_batch % opt.run_valid_every == 0:
@@ -506,4 +530,46 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    opt = init_argument_parser()
+    num_threads = multiprocessing.cpu_count()
+    num_threads = min(num_threads, 4)
+
+    word_list, tag_list = read_training_data(opt)
+    mappings = restore_mapping(opt) if opt.restore_model \
+        else construct_mapping(word_list, tag_list, opt)
+
+    (word_index_dict, tag_index_dict, index_word_dict,
+     index_tag_dict, num_shared_words) = mappings
+
+    if opt.store_dict:
+        word_index_path = os.path.join(opt.model_path, opt.word_index_map_name)
+        tag_index_path = os.path.join(opt.model_path, opt.tag_index_map_name)
+        output_iterator(word_index_path, word_index_dict.items())
+        output_iterator(tag_index_path, tag_index_dict.items())
+        print("Succeed in storing dicts")
+
+    training_size = int(len(word_list) * 0.8)
+
+    print("Number of words {0}, tags {1} an d shared_words {2}".format(
+        len(word_index_dict),
+        len(tag_index_dict),
+        num_shared_words))
+    text_dataset_train = TextIndexDataset(word_list[:training_size],
+                                          tag_list[:training_size],
+                                          word_index_dict,
+                                          tag_index_dict)
+
+    text_dataset_valid = TextIndexDataset(word_list[training_size:],
+                                          tag_list[training_size:],
+                                          word_index_dict,
+                                          tag_index_dict)
+
+    vocab_size, vocab_size_decoder = len(word_index_dict), len(tag_index_dict)
+    opt.vocab_size = vocab_size
+    opt.vocab_size_decoder = vocab_size_decoder
+    model = Seq2SeqLSTMAttention(opt, vocab_size, vocab_size_decoder)
+
+    if torch.cuda.is_available():
+        model = model.cuda() if torch.cuda.device_count() == 1 else \
+            nn.parallel.DataParallel(model.cuda())
+
