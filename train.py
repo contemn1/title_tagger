@@ -267,7 +267,8 @@ def inference_one_epoch(model, valid_data_laoder, index_to_tags, opt):
             max_length = predicted_indices.size(1)
 
             oov_list = batch_data[-1]
-            seq_length = calculate_length(predicted_indices, max_length)
+            seq_length = calculate_length(predicted_indices.detach().cpu(),
+                                          max_length)
             predicted_tags = predicted_indices_to_tags(predicted_indices,
                                                        index_to_tags,
                                                        oov_list,
