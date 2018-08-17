@@ -20,7 +20,7 @@ from src.data_util import restore_word_index_mapping, build_mapping_from_dict
 from src.data_util import read_file, build_dict_from_iterator, output_iterator
 from src.model import Seq2SeqLSTMAttention
 from src.sampling import teacher_forcing_sampler, greedy_sampler, random_sampler
-
+from src.constants import UNK
 
 def forward_ml(model, word_indices, word_length, tag_indices,
                word_indices_ext, max_oov_number, tag_indices_ext):
@@ -86,7 +86,7 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
             if ele in oov_dict:
                 words_per_line.append(oov_dict[ele])
 
-        words_list.append(words_per_line)
+        words_list.append(list(set(words_per_line)))
     return words_list
 
 
@@ -549,19 +549,13 @@ if __name__ == '__main__':
         output_iterator(tag_index_path, tag_index_dict.items())
         print("Succeed in storing dicts")
 
-    training_size = int(len(word_list) * 0.8)
-
     print("Number of words {0}, tags {1} an d shared_words {2}".format(
         len(word_index_dict),
         len(tag_index_dict),
         num_shared_words))
-    text_dataset_train = TextIndexDataset(word_list[:training_size],
-                                          tag_list[:training_size],
-                                          word_index_dict,
-                                          tag_index_dict)
 
-    text_dataset_valid = TextIndexDataset(word_list[training_size:],
-                                          tag_list[training_size:],
+    text_dataset_valid = TextIndexDataset(word_list,
+                                          tag_list,
                                           word_index_dict,
                                           tag_index_dict)
 
@@ -571,7 +565,7 @@ if __name__ == '__main__':
     model = Seq2SeqLSTMAttention(opt, vocab_size, vocab_size_decoder)
 
     valid_loader = DataLoader(text_dataset_valid, batch_size=opt.batch_size,
-                              shuffle=True,
+                              shuffle=False,
                               collate_fn=text_dataset_valid.collate_fn_one2one,
                               num_workers=num_threads,
                               pin_memory=torch.cuda.is_available())
