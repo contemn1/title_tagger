@@ -569,7 +569,14 @@ if __name__ == '__main__':
     opt.vocab_size_decoder = vocab_size_decoder
     model = Seq2SeqLSTMAttention(opt, vocab_size, vocab_size_decoder)
 
+    valid_loader = DataLoader(text_dataset_valid, batch_size=opt.batch_size,
+                              shuffle=True,
+                              collate_fn=text_dataset_valid.collate_fn_one2one,
+                              num_workers=num_threads,
+                              pin_memory=torch.cuda.is_available())
+
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
 
+    inference_one_epoch(model, valid_loader, index_tag_dict, opt)
