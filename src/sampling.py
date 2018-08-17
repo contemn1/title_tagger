@@ -14,10 +14,9 @@ def teacher_forcing_sampler(final_distribution, trg_inputs, step,
 
 
 def greedy_sampler(final_distribution, *unused_args, **unused_kargs):
-    final_distribution[:, :, UNK] = -float("inf")
     top_v, top_idx = final_distribution.topk(1, dim=-1)
     top_idx = top_idx.squeeze(2)
-    return top_idx, top_idx
+    return torch.tensor(top_idx), top_idx
 
 
 def random_sampler(final_distribution, *unused_args, **unused_kargs):
