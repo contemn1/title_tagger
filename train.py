@@ -262,7 +262,7 @@ def inference_one_epoch(model, valid_data_laoder, index_to_tags, opt):
         with torch.no_grad():
             loss_valid, predicted_indices = inference_one_batch(
                 batch_data, model, criterion,
-                teacher_forcing_sampler, opt.vocab_size_decoder)
+                greedy_sampler, opt.vocab_size_decoder)
 
             max_length = predicted_indices.size(1)
 
