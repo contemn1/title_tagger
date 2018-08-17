@@ -247,7 +247,6 @@ class CopyDecoder(nn.Module):
             decoder_logit = torch.cat((decoder_output, enc_dec_attention,
                                        dec_self_attention), 2)
 
-            decoder_logit = self.dropout_layer(decoder_logit)
             generation_prob_dist = self.decoder2vocab(decoder_logit)
 
             copy_prob = self.copy_switch(decoder_logit)
