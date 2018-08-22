@@ -1,5 +1,5 @@
 if [ ${PREVIOUS_JOB_OUTPUT_DIR} ]; then
-    python train.py --training-dir "${DATA_DIR}"  \
+    python3 train.py --training-dir "${DATA_DIR}"  \
     --training-file "result_20170321_20171231_filtered_v3.txt" \
     --batch-size 128 \
     --rnn-size 64 \
@@ -15,7 +15,7 @@ if [ ${PREVIOUS_JOB_OUTPUT_DIR} ]; then
     --restore-model True
 
 else
-    python train.py --training-dir "${DATA_DIR}"  \
+    python3 train.py --training-dir "${DATA_DIR}"  \
     --training-file "result_20170321_20171231_filtered_v3.txt" \
     --batch-size 128 \
     --rnn-size 64 \
