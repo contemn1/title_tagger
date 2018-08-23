@@ -442,13 +442,6 @@ def beam_search_one_batch(data_batch, model):
 
 
 def init_optimizer_criterion(model, opt):
-    """
-    mask the PAD <pad> when computing loss, before we used weight matrix, but not handy for copy-model, change to ignore_index
-    :param model:
-    :param opt:
-    :return:
-    """
-
     criterion = torch.nn.NLLLoss(ignore_index=PAD,
                                  reduce=False)
 
@@ -606,6 +599,12 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
+
+    optimizer, criterion = init_optimizer_criterion(model, opt)
+    if opt.restore_model:
+        model_path = os.path.join(opt.previous_output_dir, opt.model_name)
+        load_pretrained_model(model_path, model, opt, optimizer)
+
 
     model.eval()
     for batch_i, batch_data in enumerate(valid_loader):
