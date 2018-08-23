@@ -618,7 +618,8 @@ if __name__ == '__main__':
                 res = index_to_tags_one_line(indinces_tensor, index_tag_dict,
                                              oov_list[idx])
                 res = [ele for ele in res if ele != "EOS"]
-                for ele in res and ele not in res_line:
-                    res_line.append(res)
+                for ele in res:
+                    if ele not in res_line:
+                        res_line.append(res)
 
             print("$$".join(res_line))
