@@ -100,9 +100,9 @@ class Attention(nn.Module):
         if self.scale:
             attn_energies = attn_energies / np.power(hidden.size(2), 0.5)
 
-        if self.normalize and previous_attn:
+        if self.normalize and previous_attn is not None:
             attn_energies = torch.exp(attn_energies)
-            previous_attn_tensor = torch.cat(previous_attn, dim=1)
+            previous_attn_tensor = previous_attn
             previous_attn_sum = torch.sum(previous_attn_tensor, 1, True)
             normalized_attn_energies = attn_energies / previous_attn_sum
             if attn_mask is not None:

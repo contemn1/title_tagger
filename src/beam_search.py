@@ -6,15 +6,16 @@ from src.constants import PAD, BOS, EOS, UNK
 class Beam(object):
     """Ordered beam of candidate outputs."""
 
-    def __init__(self, size, cuda=torch.cuda.is_available(), n_best=1,
-                 minimum_length=1):
+    def __init__(self, size, initial_hidden,
+                 cuda=torch.cuda.is_available(), n_best=1,
+                 minimum_length=1, length_norm=True):
         """Initialize params."""
         self.size = size
-        self.eos_top = False
+        self.tt = torch.cuda if cuda else torch
+
         self.pad = PAD
         self.bos = BOS
-        self.eos = EOS
-        self.tt = torch.cuda if cuda else torch
+
         self.n_best = n_best
 
         # The score for each translation on the beam.
@@ -24,21 +25,31 @@ class Beam(object):
         # Time and k pair for finished.
         self.finished = []
 
-        self.minimum_length = minimum_length
         # The backpointers at each time-step.
         self.previous_paths = []
 
         # The outputs at each time-step.
+        self.hidden = initial_hidden
+        self.eos = EOS
+        self.eos_top = False
         self.next_inputs = [self.tt.LongTensor(size).fill_(self.eos)]
 
         self.next_inputs[0][0] = BOS
 
+        self.length_norm = length_norm
+        self.minimum_length = minimum_length
         # The attentions (matrix) for each time.
+        self.attn = []
+
+        self.outputs = []
 
     # Get the outputs for the current timestep.
     def get_current_state(self):
         """Get state of beam."""
         return self.next_inputs[-1]
+
+    def get_preivous_hidden(self):
+        return self.hidden
 
     # Get the backpointers for the current timestep.
     def get_current_origin(self):
@@ -55,13 +66,12 @@ class Beam(object):
     #
     # Returns: True if beam search is complete.
 
-    def advance(self, word_lk):
+    def advance(self, word_lk, previous_dec_out, previous_attn, dec_hidden):
         """Advance the beam."""
         num_words = word_lk.size(1)
 
         # Sum the previous scores.
         if len(self.previous_paths) > 0:
-            word_lk[:, 0] += -1e10
             beam_lk = word_lk + self.scores.unsqueeze(1).expand_as(word_lk)
 
             for i in range(self.next_inputs[-1].size(0)):
@@ -77,13 +87,19 @@ class Beam(object):
         self.all_scores.append(self.scores)
         self.scores = best_scores
 
-        prev_k = best_scores_id // num_words
+        prev_k = best_scores_id / num_words
         self.previous_paths.append(prev_k)
         self.next_inputs.append(best_scores_id - prev_k * num_words)
+        self.attn.append(previous_attn.index_select(0, prev_k))
+        self.outputs.append(previous_dec_out.index_select(0, prev_k))
+        self.hidden = (dec_hidden[0].index_select(1, prev_k),
+                       dec_hidden[1].index_select(1, prev_k))
 
         for i in range(self.next_inputs[-1].size(0)):
             if self.next_inputs[-1][i] == self.eos:
                 s = self.scores[i]
+                if self.length_norm:
+                    s /= len(self.next_inputs)
 
                 if len(self.next_inputs) - 1 >= self.minimum_length:
                     self.finished.append((s, len(self.next_inputs) - 1, i))
@@ -104,13 +120,14 @@ class Beam(object):
     def done(self):
         return self.eos_top and len(self.finished) >= self.n_best
 
-    def beam_update(self, state, idx):
+    def update_attention(self, state, idx):
         positions = self.get_current_origin()
-        for e in state:
-            a, br, d = e.size()
-            e = e.view(a, self.size, br // self.size, d)
-            sent_states = e[:, :, idx]
-            sent_states.data.copy_(sent_states.data.index_select(1, positions))
+        for s in state:
+            batch_size, seq_length, embed_size = s.size()
+            s = s.view(batch_size // self.size, self.size,
+                       seq_length, embed_size)
+            attn = s[idx]
+            attn.data.copy_(attn.data.index_select(0, positions))
 
     def sort_finished(self, minimum=None):
         if minimum is not None:
@@ -119,7 +136,7 @@ class Beam(object):
             while len(self.finished) < minimum:
                 s = self.scores[i]
                 self.finished.append((s, len(self.next_inputs) - 1, i))
-            i += 1
+                i += 1
 
         self.finished.sort(key=lambda a: -a[0])
         scores = [sc for sc, _, _ in self.finished]
@@ -135,4 +152,25 @@ class Beam(object):
             hyp.append(self.next_inputs[j + 1][k])
             k = self.previous_paths[j][k]
 
-        return hyp[::-1]
+        return torch.tensor(hyp[::-1])
+
+    def get_prev_attn_outputs(self, timestep, k):
+        attn = []
+        outputs = []
+        for j in range(len(self.previous_paths[:timestep]) -1, -1, -1):
+            attn.append(self.attn[j][k])
+            outputs.append(self.outputs[j][k])
+            k = self.previous_paths[j][k]
+        return torch.cat(attn[::-1], dim=0), torch.cat(outputs[::-1], dim=0)
+
+    def get_all_prev_attn_outputs(self, timestep):
+        all_attention = []
+        all_outputs = []
+        for idx in range(self.size):
+            attn_idx, outputs_idx = self.get_prev_attn_outputs(timestep, idx)
+            all_attention.append(attn_idx.unsqueeze(0))
+            all_outputs.append(outputs_idx.unsqueeze(0))
+
+        attn_tensor = torch.cat(all_attention, dim=0)
+        outputs_tensor = torch.cat(all_outputs, dim=0)
+        return attn_tensor, outputs_tensor

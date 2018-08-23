@@ -7,6 +7,7 @@ from src.attention import Attention
 from src.constants import PAD
 from src.util import merge_copy_generation
 from src.constants import UNK, PAD
+from src.beam_search import Beam
 
 
 class Encoder(nn.Module):
@@ -164,8 +165,9 @@ class CopyDecoder(nn.Module):
                                          nn.Sigmoid())
 
         if self.input_feeding:
-            self.dec_input_bridge = nn.Linear(decoder_hidden * 2 + embedding_size,
-                                              embedding_size)
+            self.dec_input_bridge = nn.Linear(
+                decoder_hidden * 2 + embedding_size,
+                embedding_size)
 
     def init_weights(self, init_range=1.0):
         """Initialize weights."""
@@ -217,7 +219,7 @@ class CopyDecoder(nn.Module):
         decoder_outputs = []
         decoder_log_probs = []
         predicted_indices_batch = []
-        previous_encoder_decoder_attn = []
+        prev_enc_dec_attn = None
 
         encoder_mask = (enc_input_ext == PAD).unsqueeze(1)
         for di in range(max_length):
@@ -229,12 +231,15 @@ class CopyDecoder(nn.Module):
             decoder_output, dec_hidden = self.rnn(decoder_input, dec_hidden)
 
             enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
-                decoder_output, enc_output, previous_encoder_decoder_attn,
+                decoder_output, enc_output, prev_enc_dec_attn,
                 attn_mask=encoder_mask
             )
 
-
-            previous_encoder_decoder_attn.append(enc_dec_logit)
+            if prev_enc_dec_attn is None:
+                prev_enc_dec_attn = enc_dec_logit
+            else:
+                prev_enc_dec_attn = torch.cat(
+                    [prev_enc_dec_attn, enc_dec_logit], dim=1)
 
             if decoder_outputs:
                 decoder_context = torch.cat(decoder_outputs, dim=1)
@@ -269,6 +274,154 @@ class CopyDecoder(nn.Module):
         predicted_indices_batch = torch.cat(predicted_indices_batch, 1)
 
         return decoder_log_probs, predicted_indices_batch
+
+    def beam_search_sample(self, beam_size, enc_input_ext,
+                           enc_output, enc_hidden, max_oov_number,
+                           length_norm=True, max_steps=5, n_best=1):
+
+        def bottle(input_tensor):
+            batch_size, beam_size, *rest_dim_sizes = input_tensor.size()
+            return input_tensor.view(batch_size * beam_size, *rest_dim_sizes)
+
+        def unbottle(input_tensor):
+            batch_size, *rest_dim_sizes = input_tensor.size()
+            new_shape = (batch_size // beam_size, beam_size, *rest_dim_sizes)
+            return input_tensor.view(*new_shape)
+
+        def batch_seq_resize(input_tensor):
+            batch_size, seq_length, *rest_dim_sizes = input_tensor.size()
+            new_size = (batch_size * beam_size, seq_length // beam_size,
+                        *rest_dim_sizes)
+            return input_tensor.resize(*new_size)
+
+        def get_active(source_tensor, indices):
+            active_source = source_tensor.index_select(index=indices, dim=0)
+            return batch_seq_resize(active_source)
+
+        def resize_hidden(hidden_tensor):
+            first, batch_size, *rest_dim_sizes = hidden_tensor.size()
+            hidden_tensor = hidden_tensor.view(first,
+                                               batch_size // beam_size,
+                                               beam_size,
+                                               *rest_dim_sizes)
+            return hidden_tensor
+
+        new_batch_size = enc_output.size(0) * beam_size
+        enc_dec_attention = torch.zeros(new_batch_size, 1, self.hidden_dim)
+        dec_self_attention = torch.zeros(new_batch_size, 1, self.hidden_dim)
+        if torch.cuda.is_available():
+            enc_dec_attention = enc_dec_attention.cuda()
+            dec_self_attention = dec_self_attention.cuda()
+
+        enc_input_ext = enc_input_ext.repeat(1, beam_size)
+        enc_output = enc_output.repeat(1, beam_size, 1)
+
+        enc_hidden = (enc_hidden[0].unsqueeze(0).repeat(1, beam_size, 1),
+                      enc_hidden[1].unsqueeze(0).repeat(1, beam_size, 1))
+
+        initial_dec_hidden = (resize_hidden(enc_hidden[0]),
+                              resize_hidden(enc_hidden[1]))
+        beams = [(Beam(size=beam_size,
+                       initial_hidden=(initial_dec_hidden[0][:, idx],
+                                       initial_dec_hidden[1][:, idx]),
+                       length_norm=length_norm, n_best=n_best), idx)
+                 for idx in range(enc_output.size(0))]
+
+        prev_enc_dec_attn = None
+        prev_dec_output = None
+        for step in range(max_steps):
+            active_beams = [beam for beam, _ in beams if not beam.done()]
+            if len(active_beams) == 0:
+                break
+
+            active_indices = [index for beam, index in beams if not beam.done()]
+            active_indices = torch.tensor(active_indices)
+            if torch.cuda.is_available():
+                active_indices = active_indices.cuda()
+
+            if step > 0:
+                attn_outputs = [beam.get_all_prev_attn_outputs(step) for beam in
+                                active_beams]
+
+                prev_enc_dec_attn = torch.cat(
+                    [attn for attn, _ in attn_outputs], 0)
+                prev_dec_output = torch.cat([out for _, out in attn_outputs], 0)
+
+            active_beam_states = [beam.get_current_state() for beam in active_beams]
+            hidden_list = [beam.get_preivous_hidden() for beam in active_beams]
+            ht_list = [first for first, _ in hidden_list]
+            ct_list = [second for _, second in hidden_list]
+            active_dec_hidden = (torch.cat(ht_list, 1), torch.cat(ct_list, 1))
+            trg_input = torch.cat(active_beam_states,
+                                  dim=0).contiguous().view(-1, 1)
+
+            trg_input[trg_input >= self.vocab_size] = UNK
+
+            trg_embedding = self.embedding(trg_input)
+            decoder_input = trg_embedding
+            decoder_output, dec_hidden = self.rnn(decoder_input,
+                                                  active_dec_hidden)
+
+            resized_hidden = (resize_hidden(dec_hidden[0]),
+                              resize_hidden(dec_hidden[1]))
+
+            active_enc_output = get_active(enc_output, active_indices)
+
+            active_enc_input_ext = get_active(enc_input_ext, active_indices)
+
+            encoder_mask = (active_enc_input_ext == PAD).unsqueeze(1)
+
+            enc_dec_attention, _, enc_dec_logit = self.enc_dec_attn(
+                decoder_output, active_enc_output, prev_enc_dec_attn,
+                attn_mask=encoder_mask
+            )
+
+            if prev_dec_output is not None:
+                dec_self_attention, _, _ = self.dec_self_attn(
+                    decoder_output, prev_dec_output)
+
+            decoder_logit = torch.cat((decoder_output, enc_dec_attention,
+                                       dec_self_attention), 2)
+
+            generation_prob_dist = self.decoder2vocab(decoder_logit)
+
+            copy_prob = self.copy_switch(decoder_logit)
+            generation_prob_dist *= (1 - copy_prob)
+            copy_prob_dist = copy_prob * enc_dec_logit
+
+            final_dist = merge_copy_generation(copy_prob_dist,
+                                               generation_prob_dist,
+                                               active_enc_input_ext,
+                                               self.vocab_size,
+                                               max_oov_number)
+
+            final_dist = self.softmax(final_dist).squeeze(1)
+            final_dist = final_dist.view(final_dist.size(0) // beam_size,
+                                         beam_size, -1)
+
+            reshaped_enc_dec_logit = unbottle(enc_dec_logit)
+            reshaped_decoder_output = unbottle(decoder_output)
+            for idx, single_beam in enumerate(active_beams):
+                new_hidden = (resized_hidden[0][:, idx],
+                              resized_hidden[1][:, idx])
+
+                single_beam.advance(final_dist[idx],
+                                    reshaped_decoder_output[idx],
+                                    reshaped_enc_dec_logit[idx],
+                                    new_hidden)
+
+        all_hypothesis = []
+        all_scores = []
+        for idx, (beam, _) in enumerate(beams):
+            scores, ks = beam.sort_finished(minimum=n_best)
+            hyps = []
+            for i, (times, k) in enumerate(ks[:n_best]):
+                hypo = beam.get_hypothesis(times, k)
+                hyps.append(hypo)
+
+            all_hypothesis.append(hyps)
+            all_scores.append(torch.tensor(scores[:n_best]))
+        return all_hypothesis, all_scores
 
 
 class Seq2SeqLSTMAttention(nn.Module):
@@ -305,3 +458,17 @@ class Seq2SeqLSTMAttention(nn.Module):
             sampler
         )
         return decoder_log_probs, predicted_indices_batch
+
+    def beam_search(self, input_src, input_src_len,
+                    input_src_ext, max_oov_number, beam_size,
+                    length_norm=True, max_steps=5, n_best=1):
+        enc_output, enc_hidden = self.encoder.forward(input_src, input_src_len)
+        hypothesis, scores = self.decoder.beam_search_sample(beam_size,
+                                                             input_src_ext,
+                                                             enc_output,
+                                                             enc_hidden,
+                                                             max_oov_number,
+                                                             length_norm,
+                                                             max_steps,
+                                                             n_best)
+        return scores, hypothesis

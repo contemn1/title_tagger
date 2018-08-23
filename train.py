@@ -22,6 +22,7 @@ from src.model import Seq2SeqLSTMAttention
 from src.sampling import teacher_forcing_sampler, greedy_sampler, random_sampler
 from src.constants import UNK
 
+
 def forward_ml(model, word_indices, word_length, tag_indices,
                word_indices_ext, max_oov_number, tag_indices_ext):
     """
@@ -90,6 +91,20 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
     return words_list
 
 
+def index_to_tags_one_line(indices, index_to_word, oov_dict):
+    indices_numpy = indices.detach().cpu().numpy()
+    words_list = []
+    tag_set = {UNK, PAD}
+    for ele in indices_numpy:
+        if ele in tag_set:
+            continue
+        if ele < len(index_to_word):
+            words_list.append(index_to_word[ele])
+        if ele in oov_dict:
+            words_list.append(oov_dict[ele])
+    return list(set(words_list))
+
+
 def forward_rl(model, word_indices, word_length, tag_indices,
                word_indices_ext, max_oov_number, tag_indices_ext):
     sampling_log_probs, sampling_indices = model.forward(word_indices,
@@ -135,7 +150,7 @@ def prepare_data(data_batch):
             tag_indices_ext, word_length)
 
 
-def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
+def inference_one_batch(data_batch, model, criterion, vocab_size, sampler):
     word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
     word_length = prepare_data(data_batch)
     batch_size, seq_length = tag_indices_ext.size()
@@ -160,6 +175,23 @@ def inference_one_batch(data_batch, model, criterion, sampler, vocab_size):
         del loss
 
     return loss_item, predicted_indices
+
+
+def predict_one_batch(data_batch, model, vocab_size, *args, **kwargs):
+    """
+
+    :type model: Seq2SeqLSTMAttention
+    """
+    word_indices, word_indices_ext, tag_indices, tag_indices_ext, \
+    word_length = prepare_data(data_batch)
+    batch_size, seq_length = tag_indices_ext.size()
+    oov_per_batch = torch.sum(word_indices_ext >= vocab_size,
+                              dim=1).max().item()
+    with torch.no_grad():
+        loss, indices = model.beam_search(word_indices, word_length,
+                                          word_indices_ext, oov_per_batch,
+                                          beam_size=4, n_best=1)
+        return loss, indices
 
 
 def train_one_batch(data_batch, model, optimizer, custom_forward,
@@ -262,7 +294,7 @@ def inference_one_epoch(model, valid_data_laoder, index_to_tags, opt):
         with torch.no_grad():
             loss_valid, predicted_indices = inference_one_batch(
                 batch_data, model, criterion,
-                greedy_sampler, opt.vocab_size_decoder)
+                opt.vocab_size_decoder, greedy_sampler)
 
             max_length = predicted_indices.size(1)
 
@@ -311,8 +343,9 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                                                          print_ml)
             small_loss = loss_ml < 1.5
             if small_loss and should_print:
-                precision, recall = calculate_precision_recall(predicted_indices,
-                                                               batch[4])
+                precision, recall = calculate_precision_recall(
+                    predicted_indices,
+                    batch[4])
                 print_precision_recall(small_loss,
                                        total_batch,
                                        precision,
@@ -335,7 +368,7 @@ def train_model(model, train_data_loader, valid_data_loader, index_to_tags,
                 for batch_valid in valid_data_loader:
                     loss_valid, predicted_indices = inference_one_batch(
                         batch_valid, model, criterion,
-                        teacher_forcing_sampler, opt.vocab_size_decoder)
+                        opt.vocab_size_decoder, teacher_forcing_sampler)
 
                     valid_loss_epoch.append(loss_valid)
 
@@ -574,4 +607,14 @@ if __name__ == '__main__':
         model = model.cuda() if torch.cuda.device_count() == 1 else \
             nn.parallel.DataParallel(model.cuda())
 
-    inference_one_epoch(model, valid_loader, index_tag_dict, opt)
+    model.eval()
+    for batch_i, batch_data in enumerate(valid_loader):
+        loss_valid, res = predict_one_batch(batch_data, model,
+                                            vocab_size_decoder)
+        oov_list = batch_data[-1]
+        for idx, pred_indices in enumerate(res):
+            for indinces_tensor in pred_indices:
+                res = index_to_tags_one_line(indinces_tensor, index_tag_dict,
+                                             oov_list[idx])
+                res = "$$".join(res)
+                print(res)
