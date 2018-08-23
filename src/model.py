@@ -413,7 +413,7 @@ class CopyDecoder(nn.Module):
         all_hypothesis = []
         all_scores = []
         for idx, (beam, _) in enumerate(beams):
-            scores, ks = beam.sort_finished(minimum=beam_size)
+            scores, ks = beam.sort_finished(minimum=n_best)
             hyps = []
             for i, (times, k) in enumerate(ks[:n_best]):
                 hypo = beam.get_hypothesis(times, k)
