@@ -188,9 +188,9 @@ def predict_one_batch(data_batch, model, vocab_size, *args, **kwargs):
     oov_per_batch = torch.sum(word_indices_ext >= vocab_size,
                               dim=1).max().item()
     with torch.no_grad():
-        loss, indices = model.beam_search(word_indices, word_length,
+        loss, indices = model.module.beam_search(word_indices, word_length,
                                           word_indices_ext, oov_per_batch,
-                                          beam_size=4, n_best=1,
+                                          beam_size=4, n_best=2,
                                           length_norm=False)
         return loss, indices
 
@@ -613,8 +613,12 @@ if __name__ == '__main__':
                                             vocab_size_decoder)
         oov_list = batch_data[-1]
         for idx, pred_indices in enumerate(res):
+            res_line = []
             for indinces_tensor in pred_indices:
                 res = index_to_tags_one_line(indinces_tensor, index_tag_dict,
                                              oov_list[idx])
                 res = [ele for ele in res if ele != "EOS"]
-                print("$$".join(res))
+                for ele in res and ele not in res_line:
+                    res_line.append(res)
+
+            print("$$".join(res_line))

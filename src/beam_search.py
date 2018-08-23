@@ -73,14 +73,10 @@ class Beam(object):
         # Sum the previous scores.
         if len(self.previous_paths) > 0:
             beam_lk = word_lk + self.scores.unsqueeze(1).expand_as(word_lk)
-            beam_lk[:, UNK] = -1e10
-
-            for i in range(self.next_inputs[-1].size(0)):
-                if self.next_inputs[-1][i] == self.eos:
-                    beam_lk[i] = -1e10
-
         else:
             beam_lk = word_lk
+
+        beam_lk[:, UNK] = -1e10
 
         flat_beam_lk = beam_lk.contiguous().view(-1)
         best_scores, best_scores_id = flat_beam_lk.topk(self.size, 0, True,
