@@ -73,6 +73,7 @@ class Beam(object):
         # Sum the previous scores.
         if len(self.previous_paths) > 0:
             beam_lk = word_lk + self.scores.unsqueeze(1).expand_as(word_lk)
+            beam_lk[:, UNK] = -1e10
 
             for i in range(self.next_inputs[-1].size(0)):
                 if self.next_inputs[-1][i] == self.eos:
