@@ -615,5 +615,5 @@ if __name__ == '__main__':
             for indinces_tensor in pred_indices:
                 res = index_to_tags_one_line(indinces_tensor, index_tag_dict,
                                              oov_list[idx])
-                res = "$$".join(res)
-                print(res)
+                res = [ele for ele in res if ele != "EOS"]
+                print("$$".join(res))
