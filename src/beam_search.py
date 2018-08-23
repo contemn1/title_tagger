@@ -78,9 +78,14 @@ class Beam(object):
 
         beam_lk[:, UNK] = -1e10
 
-        flat_beam_lk = beam_lk.contiguous().view(-1)
-        best_scores, best_scores_id = flat_beam_lk.topk(self.size, 0, True,
-                                                        True)
+        if len(self.previous_paths) > 0:
+            flat_beam_lk = beam_lk.contiguous().view(-1)
+            best_scores, best_scores_id = flat_beam_lk.topk(self.size, 0, True,
+                                                            True)
+        else:
+            best_scores, best_scores_id = beam_lk[0].topk(self.size, 0, True,
+                                                            True)
+
         self.all_scores.append(self.scores)
         self.scores = best_scores
 
