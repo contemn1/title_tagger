@@ -190,7 +190,8 @@ def predict_one_batch(data_batch, model, vocab_size, *args, **kwargs):
     with torch.no_grad():
         loss, indices = model.beam_search(word_indices, word_length,
                                           word_indices_ext, oov_per_batch,
-                                          beam_size=4, n_best=1)
+                                          beam_size=4, n_best=1,
+                                          length_norm=False)
         return loss, indices
 
 
