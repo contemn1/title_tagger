@@ -32,7 +32,7 @@ class Beam(object):
         self.hidden = initial_hidden
         self.eos = EOS
         self.eos_top = False
-        self.next_inputs = [self.tt.LongTensor(size).fill_(self.eos)]
+        self.next_inputs = [self.tt.LongTensor(size).fill_(BOS)]
 
         self.next_inputs[0][0] = BOS
 
