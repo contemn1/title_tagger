@@ -94,7 +94,7 @@ def predicted_indices_to_tags(indices, index_to_word, oov_list, seq_lengths):
 def index_to_tags_one_line(indices, index_to_word, oov_dict):
     indices_numpy = indices.detach().cpu().numpy()
     words_list = []
-    tag_set = {UNK, PAD}
+    tag_set = {PAD}
     for ele in indices_numpy:
         if ele in tag_set:
             continue
@@ -102,7 +102,7 @@ def index_to_tags_one_line(indices, index_to_word, oov_dict):
             words_list.append(index_to_word[ele])
         if ele in oov_dict:
             words_list.append(oov_dict[ele])
-    return list(set(words_list))
+    return words_list
 
 
 def forward_rl(model, word_indices, word_length, tag_indices,
