@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
-
+from typing import List, Dict
 import io
 import logging
 import sys
@@ -67,13 +67,19 @@ def word_to_id(word_list, word_to_index):
     return word_indices
 
 
-def word_to_id_ext(word_list, word_to_index):
+def word_to_id_ext(word_list, vocabulary):
+    """
+    :type word_list: List[str]
+    :type vocabulary: Dict[str, int]
+    """
     word_indices = []
     oov_dict = {}
-    initial = len(word_to_index)
+    initial = len(vocabulary)
     for word in word_list:
-        if word in word_to_index:
-            word_indices.append(word_to_index[word])
+        if word in vocabulary:
+            word_indices.append(vocabulary[word])
+        elif word in oov_dict:
+            continue
         else:
             oov_index = initial + len(oov_dict)
             word_indices.append(oov_index)
